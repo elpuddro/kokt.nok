@@ -1,0 +1,5 @@
+# Filer som IKKE skal trigge Tauri dev-rebuild (cargo watch).
+# data/ er kjøretidsdata (kokt.db + WAL/SHM-sidecars som appen lager når den
+# åpner DB-en). Uten dette havner dev i en uendelig rebuild-løkke:
+# appen åpner kokt.db → lager kokt.db-shm → watcher ser endring → rebuild → …
+data/

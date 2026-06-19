@@ -1,0 +1,24 @@
+# EKSEMPEL — kopier til .cargo/config.toml og fyll inn DINE stier.
+#
+# Fjerner utviklerens brukernavn/stier fra kompilerte binærer (personvern).
+# --remap-path-prefix skriver om absolutte byggstier til nøytrale verdier i
+# panic-meldinger / debug-info som ellers havner i exe-en.
+#
+# Bytt ut <BRUKER> (Windows) og <LINUX-BRUKER> (Linux/WSL) med dine egne, og
+# prosjektstien med din klone-sti. Både bakstrek- og skråstrek-former tas med
+# fordi rustc kan embedde begge på Windows; ikke-matchende former er no-ops.
+#
+# Denne fila (config.toml) er gitignorert fordi den inneholder maskin-spesifikke
+# brukernavn — hver utvikler lager sin egen fra dette eksempelet.
+[build]
+rustflags = [
+    # Windows
+    "--remap-path-prefix=C:\\Users\\<BRUKER>\\.cargo=/cargo",
+    "--remap-path-prefix=C:\\Users\\<BRUKER>\\CODE\\kokt.nok=/prosjekt",
+    "--remap-path-prefix=C:/Users/<BRUKER>/.cargo=/cargo",
+    "--remap-path-prefix=C:/Users/<BRUKER>/CODE/kokt.nok=/prosjekt",
+    # Linux / WSL
+    "--remap-path-prefix=/home/<LINUX-BRUKER>/.cargo=/cargo",
+    "--remap-path-prefix=/home/<LINUX-BRUKER>/.rustup=/rustup",
+    "--remap-path-prefix=/mnt/c/Users/<BRUKER>/CODE/kokt.nok=/prosjekt",
+]

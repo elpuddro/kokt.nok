@@ -1,0 +1,131 @@
+/* Kokebok – global styles (ported from Electron renderer/styles.css) */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:           #faf6ef;
+  --bg-warm:      #f5ede0;
+  --surface:      #ffffff;
+  --card:         #ffffff;
+  --card-hover:   #fffbf5;
+  --sidebar-bg:   #f2ead9;
+
+  --border:       #e2d5c3;
+  --border-light: #ede4d5;
+  --border-focus: #b5451b;
+
+  --accent:       #b5451b;
+  --accent-light: #d05a2a;
+  --accent-dark:  #8f3212;
+  --accent-bg:    rgba(181,69,27,0.08);
+  --accent-bg2:   rgba(181,69,27,0.16);
+
+  --text:         #2c1a0e;
+  --text-muted:   #7a6248;
+  --text-dim:     #b8a08a;
+
+  --green:        #4a7c59;
+  --gold:         #c9901a;
+  --red:          #b5451b;
+
+  --sidebar-w:    270px;
+  --radius:       10px;
+  --radius-sm:    6px;
+  --shadow-sm:    0 1px 4px rgba(44,26,14,0.08), 0 1px 2px rgba(44,26,14,0.06);
+  --shadow:       0 2px 12px rgba(44,26,14,0.10), 0 1px 4px rgba(44,26,14,0.08);
+  --shadow-lg:    0 8px 32px rgba(44,26,14,0.14);
+  --font-ui:      -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-head:    Georgia, 'Times New Roman', serif;
+}
+
+/* ── Temaer: overstyrer :root-palett via data-tema på <html> ───────────────── */
+
+[data-tema="dark"] {
+  --bg:#1a1714; --bg-warm:#211d19; --surface:#2a2420; --card:#2a2420; --card-hover:#332c26; --sidebar-bg:#211d19;
+  --border:#3a322b; --border-light:#332c26; --border-focus:#d68a4a;
+  --accent:#d68a4a; --accent-light:#e6a566; --accent-dark:#c0763a; --accent-bg:rgba(214,138,74,0.12); --accent-bg2:rgba(214,138,74,0.22);
+  --text:#e8ddcf; --text-muted:#a8967f; --text-dim:#7d6e5c;
+  --shadow-sm:0 1px 4px rgba(0,0,0,0.4); --shadow:0 2px 12px rgba(0,0,0,0.5); --shadow-lg:0 8px 32px rgba(0,0,0,0.6);
+}
+
+[data-tema="vinter"] {
+  --bg:#f4f7fa; --bg-warm:#e8eef4; --surface:#ffffff; --card:#ffffff; --card-hover:#f4f8fc; --sidebar-bg:#e8eef4;
+  --border:#cfdbe8; --border-light:#e0e8f0; --border-focus:#2d5a87;
+  --accent:#2d5a87; --accent-light:#3d6f9e; --accent-dark:#214466; --accent-bg:rgba(45,90,135,0.08); --accent-bg2:rgba(45,90,135,0.16);
+  --text:#1f2d3d; --text-muted:#5a6b7d; --text-dim:#9aabbd;
+}
+
+[data-tema="vaar"] {
+  --bg:#f6faf2; --bg-warm:#eaf3e2; --surface:#ffffff; --card:#ffffff; --card-hover:#f5faf0; --sidebar-bg:#eaf3e2;
+  --border:#d4e3c6; --border-light:#e3eed8; --border-focus:#5b8c3a;
+  --accent:#5b8c3a; --accent-light:#6fa349; --accent-dark:#46702c; --accent-bg:rgba(91,140,58,0.10); --accent-bg2:rgba(91,140,58,0.18);
+  --text:#2c3a22; --text-muted:#5e7048; --text-dim:#9cae84;
+}
+
+[data-tema="sommer"] {
+  --bg:#fffdf4; --bg-warm:#fff4d6; --surface:#ffffff; --card:#ffffff; --card-hover:#fffaf0; --sidebar-bg:#fff4d6;
+  --border:#e8e0c0; --border-light:#f0ead2; --border-focus:#0096a0;
+  --accent:#0096a0; --accent-light:#1bb0ba; --accent-dark:#007680; --accent-bg:rgba(0,150,160,0.10); --accent-bg2:rgba(0,150,160,0.18);
+  --text:#3d3416; --text-muted:#6e6440; --text-dim:#aaa078;
+}
+
+[data-tema="host"] {
+  --bg:#faf3ea; --bg-warm:#f0e2d0; --surface:#fffaf3; --card:#fffaf3; --card-hover:#fff4e6; --sidebar-bg:#f0e2d0;
+  --border:#e6d2b8; --border-light:#eddfc9; --border-focus:#b05a1e;
+  --accent:#b05a1e; --accent-light:#c87030; --accent-dark:#8c4514; --accent-bg:rgba(176,90,30,0.10); --accent-bg2:rgba(176,90,30,0.18);
+  --text:#3a2615; --text-muted:#876446; --text-dim:#b89a7a;
+}
+
+[data-tema="paske"] {
+  --bg:#fffef6; --bg-warm:#fbf3d9; --surface:#ffffff; --card:#ffffff; --card-hover:#fffbef; --sidebar-bg:#fbf3d9;
+  --border:#ecdfae; --border-light:#f3ebca; --border-focus:#c9901a;
+  --accent:#c9901a; --accent-light:#dca72f; --accent-dark:#a4730f; --accent-bg:rgba(201,144,26,0.10); --accent-bg2:rgba(201,144,26,0.18);
+  --text:#3d3414; --text-muted:#7a6a38; --text-dim:#b3a570;
+}
+
+[data-tema="17mai"] {
+  --bg:#fafbfd; --bg-warm:#eef1f7; --surface:#ffffff; --card:#ffffff; --card-hover:#f6f8fc; --sidebar-bg:#eef1f7;
+  --border:#d6dded; --border-light:#e6ebf4; --border-focus:#b5121f;
+  --accent:#b5121f; --accent-light:#d02230; --accent-dark:#8d0d18; --accent-bg:rgba(45,75,155,0.10); --accent-bg2:rgba(181,18,31,0.16);
+  --text:#1b2240; --text-muted:#4a5578; --text-dim:#9aa3c0;
+}
+
+[data-tema="halloween"] {
+  --bg:#1c1620; --bg-warm:#251d2c; --surface:#2e2438; --card:#2e2438; --card-hover:#382c44; --sidebar-bg:#251d2c;
+  --border:#42334f; --border-light:#382c44; --border-focus:#ff7518;
+  --accent:#ff7518; --accent-light:#ff8d3e; --accent-dark:#e05e08; --accent-bg:rgba(255,117,24,0.12); --accent-bg2:rgba(255,117,24,0.24);
+  --text:#f0e6d8; --text-muted:#b09cc0; --text-dim:#7d6a8c;
+  --shadow-sm:0 1px 4px rgba(0,0,0,0.4); --shadow:0 2px 12px rgba(0,0,0,0.5); --shadow-lg:0 8px 32px rgba(0,0,0,0.6);
+}
+
+[data-tema="valentines"] {
+  --bg:#fdf4f7; --bg-warm:#f9e6ee; --surface:#ffffff; --card:#ffffff; --card-hover:#fdf2f6; --sidebar-bg:#f9e6ee;
+  --border:#f0cdda; --border-light:#f6dde7; --border-focus:#c2185b;
+  --accent:#c2185b; --accent-light:#d83b76; --accent-dark:#9c1248; --accent-bg:rgba(194,24,91,0.08); --accent-bg2:rgba(194,24,91,0.16);
+  --text:#3d1726; --text-muted:#7a4558; --text-dim:#bb8a9c;
+}
+
+[data-tema="singles"] {
+  --bg:#f7f8fa; --bg-warm:#eceef2; --surface:#ffffff; --card:#ffffff; --card-hover:#f5f6f9; --sidebar-bg:#eceef2;
+  --border:#d8dbe2; --border-light:#e6e8ee; --border-focus:#5b35b0;
+  --accent:#5b35b0; --accent-light:#7150c4; --accent-dark:#46298a; --accent-bg:rgba(91,53,176,0.08); --accent-bg2:rgba(91,53,176,0.16);
+  --text:#241d33; --text-muted:#574d6b; --text-dim:#9a90b0;
+}
+
+html { font-size: 15px; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: var(--bg-warm); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+.hidden { display: none !important; }

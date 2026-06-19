@@ -1,0 +1,2 @@
+pytest>=8.0
+Pillow>=10.0   # bildebehandling: recompress_bilder.py, bygg_bundle_db.py, hent_godt.py
