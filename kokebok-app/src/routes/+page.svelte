@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
-  import { onMount } from "svelte";
+  import { onMount, onDestroy } from "svelte";
   import { favorittLast, favorittToggle } from "$lib/favoritter";
   import {
     handlelisteLast, handlelisteLeggTil, handlelisteFjern,
@@ -9,6 +9,7 @@
   import { temaLast, temaSett, aktivtTema, gjeldendeTema, TEMAER, type TemaId, type Lagret } from "$lib/tema";
   import { notaterLast, notatSett } from "$lib/notater";
   import { diettLast, diettSett, DIETT_FILTRE } from "$lib/diett";
+  import { finnTider } from "$lib/tid-parsing";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -42,6 +43,12 @@
   let notater = $state<Record<number, string>>({});
   let notatTimer: any;
   let aktiveDietter = $state<string[]>([]);
+  let cookModeAktiv = $state(false);
+  type Timer = { id: number; navn: string; igjen: number; total: number; ferdig: boolean; pauset: boolean };
+  let timere = $state<Timer[]>([]);
+  let nesteTimerId = 1;
+  let timerTikk: any = null;
+  let lydCtx: AudioContext | null = null;
 
   let pages = $derived(Math.ceil(total / perSide));
   let totalAlle = $derived(kategorier.reduce((s, k) => s + k.antall, 0));
@@ -303,8 +310,101 @@
     }
   }
   function lukkDetalj() {
+    slåAvCookMode();
     currentOppskrift = null;
     portioner = null;
+  }
+
+  async function toggleCookMode() {
+    cookModeAktiv = !cookModeAktiv;
+    try {
+      await invoke("cook_mode", { on: cookModeAktiv });
+    } catch (e) {
+      console.error("cook_mode feilet:", e);
+    }
+  }
+  async function slåAvCookMode() {
+    if (!cookModeAktiv) return;
+    cookModeAktiv = false;
+    try { await invoke("cook_mode", { on: false }); } catch (e) { console.error(e); }
+  }
+
+  function startTimer(sekunder: number, navn: string) {
+    if (!lydCtx) {
+      try { lydCtx = new AudioContext(); } catch { lydCtx = null; }
+    }
+    if (lydCtx && lydCtx.state === "suspended") lydCtx.resume();
+
+    timere = [...timere, {
+      id: nesteTimerId++, navn, igjen: sekunder, total: sekunder,
+      ferdig: false, pauset: false,
+    }];
+    startTikkHvisNødvendig();
+  }
+
+  function startTikkHvisNødvendig() {
+    if (timerTikk) return;
+    timerTikk = setInterval(() => {
+      let endret = false;
+      const oppdatert = timere.map((t) => {
+        if (t.pauset || t.ferdig) return t;
+        const igjen = t.igjen - 1;
+        endret = true;
+        if (igjen <= 0) {
+          spillAlarm();
+          return { ...t, igjen: 0, ferdig: true };
+        }
+        return { ...t, igjen };
+      });
+      if (endret) timere = oppdatert;
+    }, 1000);
+  }
+
+  function pauseTimer(id: number) {
+    timere = timere.map((t) => (t.id === id ? { ...t, pauset: !t.pauset } : t));
+  }
+
+  function fjernTimer(id: number) {
+    timere = timere.filter((t) => t.id !== id);
+    if (timere.length === 0 && timerTikk) { clearInterval(timerTikk); timerTikk = null; }
+  }
+
+  function spillAlarm() {
+    if (!lydCtx) return;
+    try {
+      const nå = lydCtx.currentTime;
+      for (let i = 0; i < 3; i++) {
+        const osc = lydCtx.createOscillator();
+        const gain = lydCtx.createGain();
+        osc.frequency.value = 880;
+        osc.connect(gain); gain.connect(lydCtx.destination);
+        const t0 = nå + i * 0.3;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.3, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+        osc.start(t0); osc.stop(t0 + 0.25);
+      }
+    } catch (e) { console.error("alarm feilet:", e); }
+  }
+
+  function fmtTid(sek: number): string {
+    const m = Math.floor(sek / 60);
+    const s = sek % 60;
+    return `${m}:${String(s).padStart(2, "0")}`;
+  }
+
+  function trinnSegmenter(tekst: string) {
+    const tider = finnTider(tekst);
+    if (tider.length === 0) return [{ klikk: false, tekst, sekunder: 0 }];
+    const seg: { klikk: boolean; tekst: string; sekunder: number }[] = [];
+    let pos = 0;
+    for (const t of tider) {
+      if (t.start > pos) seg.push({ klikk: false, tekst: tekst.slice(pos, t.start), sekunder: 0 });
+      seg.push({ klikk: true, tekst: t.tekst, sekunder: t.sekunder });
+      pos = t.slutt;
+    }
+    if (pos < tekst.length) seg.push({ klikk: false, tekst: tekst.slice(pos), sekunder: 0 });
+    return seg;
   }
   function endrePorsjoner(delta: number) {
     const cur = portioner ?? currentOppskrift?.porsjoner ?? 4;
@@ -368,6 +468,11 @@
     aktiveDietter = await diettLast();
     kategorier = await invoke("get_kategorier", { dietter: aktiveDietter });
     await fetchGrid();
+  });
+
+  onDestroy(() => {
+    slåAvCookMode();
+    if (timerTikk) clearInterval(timerTikk);
   });
 </script>
 
@@ -659,6 +764,12 @@
           title={handleliste.some((p) => p.id === opp.id) ? "I handlelista" : "Legg i handleliste"}
           onclick={() => leggIHandleliste(opp.id, curP)}
         >{handleliste.some((p) => p.id === opp.id) ? "🛒 I handleliste" : "🛒 Legg i handleliste"}</button>
+        <button
+          class="detail-cook"
+          class:aktiv={cookModeAktiv}
+          title={cookModeAktiv ? "Skjermen holdes våken" : "Hold skjermen våken under matlaging"}
+          onclick={toggleCookMode}
+        >{cookModeAktiv ? "👩‍🍳 Holder våken" : "👩‍🍳 Hold skjermen våken"}</button>
         <span class="detail-type-pill">{emoji(opp.type)} {opp.type ?? "Oppskrift"}</span>
         {#if opp.tid}<span class="detail-time-pill">⏱ {opp.tid}</span>{/if}
       </div>
@@ -705,7 +816,17 @@
             {#each opp.trinn as t, idx}
               <div class="step-item">
                 <div class="step-num">{t.nummer ?? idx + 1}</div>
-                <div class="step-tekst">{t.tekst}</div>
+                <div class="step-tekst">
+                  {#each trinnSegmenter(t.tekst) as s}
+                    {#if s.klikk}
+                      <button
+                        class="tid-knapp"
+                        title="Start timer ({fmtTid(s.sekunder)})"
+                        onclick={() => startTimer(s.sekunder, `${opp.navn} – trinn ${t.nummer ?? idx + 1}`)}
+                      >⏱ {s.tekst}</button>
+                    {:else}{s.tekst}{/if}
+                  {/each}
+                </div>
               </div>
             {/each}
           </div>
@@ -787,6 +908,23 @@
 
 {#if loading}
   <div id="loader"><div class="spinner"></div></div>
+{/if}
+
+{#if timere.length > 0}
+  <div id="timer-panel">
+    {#each timere as t (t.id)}
+      <div class="timer-rad" class:ferdig={t.ferdig}>
+        <span class="timer-navn">{t.ferdig ? "🔔" : "⏱"} {t.navn}</span>
+        <span class="timer-tid">{t.ferdig ? "ferdig!" : fmtTid(t.igjen)}</span>
+        {#if !t.ferdig}
+          <button class="timer-btn" title={t.pauset ? "Fortsett" : "Pause"} onclick={() => pauseTimer(t.id)}>
+            {t.pauset ? "▶" : "⏸"}
+          </button>
+        {/if}
+        <button class="timer-btn" title="Fjern" onclick={() => fjernTimer(t.id)}>✕</button>
+      </div>
+    {/each}
+  </div>
 {/if}
 
 <style>
@@ -931,6 +1069,41 @@
     font-size: 0.9rem;
   }
   .detail-handle.aktiv { border-color: var(--accent-dark); }
+  .detail-cook {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: var(--radius); padding: 8px 14px; cursor: pointer; font-size: 0.9rem;
+  }
+  .detail-cook:hover { border-color: var(--border-focus); }
+  .detail-cook.aktiv { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tid-knapp {
+    display: inline; border: none; background: var(--accent-bg);
+    color: var(--accent-dark); font: inherit; cursor: pointer;
+    border-radius: 4px; padding: 0 4px; white-space: nowrap;
+  }
+  .tid-knapp:hover { background: var(--accent); color: #fff; }
+
+  #timer-panel {
+    position: fixed; right: 18px; bottom: 18px; z-index: 100;
+    display: flex; flex-direction: column; gap: 8px; max-width: 320px;
+  }
+  .timer-rad {
+    display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 8px 12px; box-shadow: var(--shadow);
+  }
+  .timer-navn { flex: 1; font-size: 0.85rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .timer-tid { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent-dark); }
+  .timer-btn {
+    border: none; background: none; cursor: pointer; font-size: 0.95rem;
+    color: var(--text-muted); padding: 0 2px;
+  }
+  .timer-btn:hover { color: var(--text); }
+  .timer-rad.ferdig {
+    border-color: var(--accent); background: var(--accent-bg);
+    animation: timer-blink 1s steps(2, start) infinite;
+  }
+  .timer-rad.ferdig .timer-tid { color: var(--accent); }
+  @keyframes timer-blink { 50% { opacity: 0.55; } }
   #handle-wrap { padding: 24px 32px; max-width: 900px; }
   .handle-topp { display: flex; justify-content: space-between; align-items: center; }
   .handle-tom {
