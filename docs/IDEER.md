@@ -70,17 +70,14 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-17.
    laktosefri, uten nøtter (AND-kombinert). Halal = «uten åpenbart haram», ikke
    sertifisering. Spec: `docs/superpowers/specs/2026-06-18-kosthold-filter-design.md`.
 
-11. **Cook Mode** — skjermen låser seg ikke / maskinen går ikke i hvilemodus
-    mens en oppskrift er åpen, så man slipper å ta på PC-en med skitne fingre.
-    Enklest og mest selvstendig: Tauri/OS-API for å hindre skjermsparer/dvale
-    (request_user_attention / platform-spesifikk «keep awake»), aktiv kun i
-    detaljvisning. Lav risiko, høy kjøkken-nytte.
+11. ~~**Cook Mode**~~ — ✅ **FERDIG 2026-06-18.** `cook_mode(on)` Tauri-kommando
+    (Windows `SetThreadExecutionState`, Linux D-Bus screensaver-inhibit) + bryter
+    i detaljvisning, auto-av ved lukk. Spec/plan: `docs/superpowers/{specs,plans}/2026-06-18-cookmode-timere*`.
 
-12. **Innebygde timere** — trykk direkte på steketid i trinn-teksten («kok i 8
-    minutter») for å starte nedtelling i appen. **Skjult kostnad:** parse
-    tid+enhet ut av fritekst i `trinn.tekst` (regex: «8 minutter», «1 time»,
-    «1½ t»), gjøre tallet klikkbart, og en timer-UI med varsel. Ren frontend,
-    men tekst-parsingen må være robust.
+12. ~~**Innebygde timere**~~ — ✅ **FERDIG 2026-06-18.** Klikkbare tider i trinn
+    (`finnTider`-parser, 19 node-tester; intervall → øvre grense, brøk),
+    flere samtidige timere i globalt panel, Web Audio-pip + visuell blink.
+    Samme spec/plan som #11.
 
 13. **«Hva har jeg i kjøleskapet?»** — bruker legger inn råvarer de har, appen
     foreslår oppskrifter som bruker disse (mest mulig dekning først) for å
@@ -88,3 +85,50 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-17.
     `ingredienser.navn` over 5962 oppskrifter og ranger på dekningsgrad
     (hvor stor andel av oppskriftens ingredienser brukeren har). Kan bygge på
     eksisterende ingrediens-søk; rangeringslogikken er kjernen.
+
+---
+
+## 💡 Nye idéer (lagt til 2026-06-19, ikke designet ennå)
+
+> **Felles arkitektur-spørsmål for #14, #18, #19 (og delvis #15):** disse
+> forutsetter en AI/LLM ved kjøretid, noe som kolliderer med offline-først /
+> luftgap-distribusjonen (fengsel). Hver må avklare mekanisme i brainstorming:
+> innebygd lokal modell (stor), online-kun «hjemme»-variant, eller
+> mal-/regelbasert pseudo-generering uten LLM.
+
+14. **AI-oppskriftsgenerator** — fritekst inn («noe med laks, spinat og pasta»)
+    → generert oppskrift (fremgangsmåte, estimert tid, næring). **Krever LLM ved
+    kjøretid** (se arkitektur-note over). Mal-/regelbasert variant mulig uten AI,
+    men gir svakere resultat.
+
+15. **Smart matplanlegger** — ukemeny ut fra budsjett, kalorimål, antall personer
+    og kosthold; genererer meny + samlet handleliste. Bygger på handlelista +
+    porsjonsskalering + pris/næring som alt finnes. Kjernen (constraint-løsing:
+    velg retter som treffer budsjett/kalori/diett) kan gjøres **regelbasert uten
+    AI**; LLM valgfritt for «variér menyen»-finpuss. Overlapper #6 (ukesmeny).
+
+16. **Lagerstyring (mini-ERP for kjøkkenet)** — registrer beholdning i skap/kjøl/
+    fryser, trekk automatisk fra brukte ingredienser (fra handleliste/laging),
+    varsle om utløpsdato. **Skjult kostnad:** ny skrivbar datamodell (beholdning +
+    utløp) og fratrekks-logikk. Tett koblet til #13/#17. Ren frontend + Tauri
+    Store (eller egen skrivbar DB). Ingen AI.
+
+17. **«Hva har jeg i kjøleskapet?»** — *samme som #13* (bruker registrerer råvarer
+    → forslag på «kan lages nå» / «mangler få» / «bruk før utløp»). Slå sammen med
+    #13; #16 (lager) gir input-dataene. Ingen AI; rangeringslogikk er kjernen.
+
+18. **Oppskriftsversjonering («Git for mat»)** — bruker lagrer egne endringer av en
+    oppskrift som versjoner (Lasagne v1.0 → v1.1 «mer hvitløk» → v2.0), kan
+    sammenligne/gjenopprette/bla bakover. **Skjult kostnad:** skrivbar versjonert
+    datamodell (diff/historikk per oppskrift) + diff-UI. Bygger på «egne
+    oppskrifter»-utvidelsen nevnt under notater (#7). Ingen AI.
+
+19. **Næringsanalyse + helseprofil** — bruker legger inn høyde/vekt (→ BMI),
+    aktivitetsnivå og mål (vektned-/oppgang); appen analyserer alle oppskrifter
+    og gir tilpassede ukesforslag (kalorier/protein/karbo/fett/fiber/vitaminer),
+    filtrerbart på lavkarbo/vegetar/vegan/glutenfri/diabetesvennlig + forslag til
+    sunnere alternativer. **Skjult kostnad:** bygger på eksisterende `naering`-
+    tabell + diett-tagger (#9/#10), men trenger BMR/TDEE-beregning,
+    mål-constraint-løsing (gjenbruk #15), og evt. utvidet næringsdata (vitaminer
+    finnes ikke i dagens `naering`-tabell — kun makro + fiber). «Ukesforslag» er
+    samme constraint-motor som #15. Ingen AI nødvendig (regelbasert).
