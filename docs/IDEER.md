@@ -90,45 +90,28 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-17.
 
 ## 💡 Nye idéer (lagt til 2026-06-19, ikke designet ennå)
 
-> **Felles arkitektur-spørsmål for #14, #18, #19 (og delvis #15):** disse
-> forutsetter en AI/LLM ved kjøretid, noe som kolliderer med offline-først /
-> luftgap-distribusjonen (fengsel). Hver må avklare mekanisme i brainstorming:
-> innebygd lokal modell (stor), online-kun «hjemme»-variant, eller
-> mal-/regelbasert pseudo-generering uten LLM.
+> **Forkastet (krever AI/LLM ved kjøretid → kolliderer med offline-/luftgap-
+> distribusjonen):** ~~AI-oppskriftsgenerator~~ og ~~næringsanalyse-helseprofil
+> med AI-forslag~~ ble vurdert og lagt bort 2026-06-19. (Versjonering #18 har en
+> mindre AI-fristelse, men er fullt mulig regelbasert.)
 
-14. **AI-oppskriftsgenerator** — fritekst inn («noe med laks, spinat og pasta»)
-    → generert oppskrift (fremgangsmåte, estimert tid, næring). **Krever LLM ved
-    kjøretid** (se arkitektur-note over). Mal-/regelbasert variant mulig uten AI,
-    men gir svakere resultat.
+14. **Lagerstyring + «Hva har jeg i kjøleskapet?»** (slår sammen tidligere
+    #13/#16/#17) — bruker registrerer beholdning i skap/kjøl/fryser; appen holder
+    oversikt, trekker fra brukte ingredienser, varsler om utløp, og foreslår
+    oppskrifter som «kan lages nå» / «mangler få» / «bør brukes før utløp».
+    **Skjult kostnad:** ny skrivbar datamodell (beholdning + utløpsdato) + match
+    av beholdning mot `ingredienser.navn` over 5962 oppskrifter med
+    dekningsgrad-rangering. Ren frontend + Tauri Store. Ingen AI.
+    **Under arbeid 2026-06-19.**
 
 15. **Smart matplanlegger** — ukemeny ut fra budsjett, kalorimål, antall personer
     og kosthold; genererer meny + samlet handleliste. Bygger på handlelista +
     porsjonsskalering + pris/næring som alt finnes. Kjernen (constraint-løsing:
-    velg retter som treffer budsjett/kalori/diett) kan gjøres **regelbasert uten
-    AI**; LLM valgfritt for «variér menyen»-finpuss. Overlapper #6 (ukesmeny).
-
-16. **Lagerstyring (mini-ERP for kjøkkenet)** — registrer beholdning i skap/kjøl/
-    fryser, trekk automatisk fra brukte ingredienser (fra handleliste/laging),
-    varsle om utløpsdato. **Skjult kostnad:** ny skrivbar datamodell (beholdning +
-    utløp) og fratrekks-logikk. Tett koblet til #13/#17. Ren frontend + Tauri
-    Store (eller egen skrivbar DB). Ingen AI.
-
-17. **«Hva har jeg i kjøleskapet?»** — *samme som #13* (bruker registrerer råvarer
-    → forslag på «kan lages nå» / «mangler få» / «bruk før utløp»). Slå sammen med
-    #13; #16 (lager) gir input-dataene. Ingen AI; rangeringslogikk er kjernen.
+    velg retter som treffer budsjett/kalori/diett) gjøres **regelbasert uten AI**.
+    Overlapper #6 (ukesmeny). **Under arbeid 2026-06-19.**
 
 18. **Oppskriftsversjonering («Git for mat»)** — bruker lagrer egne endringer av en
     oppskrift som versjoner (Lasagne v1.0 → v1.1 «mer hvitløk» → v2.0), kan
     sammenligne/gjenopprette/bla bakover. **Skjult kostnad:** skrivbar versjonert
     datamodell (diff/historikk per oppskrift) + diff-UI. Bygger på «egne
     oppskrifter»-utvidelsen nevnt under notater (#7). Ingen AI.
-
-19. **Næringsanalyse + helseprofil** — bruker legger inn høyde/vekt (→ BMI),
-    aktivitetsnivå og mål (vektned-/oppgang); appen analyserer alle oppskrifter
-    og gir tilpassede ukesforslag (kalorier/protein/karbo/fett/fiber/vitaminer),
-    filtrerbart på lavkarbo/vegetar/vegan/glutenfri/diabetesvennlig + forslag til
-    sunnere alternativer. **Skjult kostnad:** bygger på eksisterende `naering`-
-    tabell + diett-tagger (#9/#10), men trenger BMR/TDEE-beregning,
-    mål-constraint-løsing (gjenbruk #15), og evt. utvidet næringsdata (vitaminer
-    finnes ikke i dagens `naering`-tabell — kun makro + fiber). «Ukesforslag» er
-    samme constraint-motor som #15. Ingen AI nødvendig (regelbasert).
