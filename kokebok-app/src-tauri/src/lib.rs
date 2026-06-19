@@ -170,6 +170,71 @@ fn bygg_diett_filter(
     }
 }
 
+// ─── Cook Mode: hold skjermen/maskinen våken (kryssplattform, best-effort) ──────
+#[derive(Default)]
+struct CookModeState {
+    #[allow(dead_code)]
+    cookie: std::sync::Mutex<Option<u32>>,
+}
+
+#[cfg(windows)]
+fn sett_keep_awake(on: bool) {
+    use windows_sys::Win32::System::Power::{
+        SetThreadExecutionState, ES_CONTINUOUS, ES_DISPLAY_REQUIRED, ES_SYSTEM_REQUIRED,
+    };
+    unsafe {
+        if on {
+            SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
+        } else {
+            SetThreadExecutionState(ES_CONTINUOUS);
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn sett_keep_awake_linux(on: bool, state: &CookModeState) {
+    let mut cookie = state.cookie.lock().unwrap();
+    let conn = match zbus::blocking::Connection::session() {
+        Ok(c) => c,
+        Err(e) => { eprintln!("cook_mode: ingen sesjonsbuss: {e}"); return; }
+    };
+    let proxy = zbus::blocking::Proxy::new(
+        &conn,
+        "org.freedesktop.ScreenSaver",
+        "/org/freedesktop/ScreenSaver",
+        "org.freedesktop.ScreenSaver",
+    );
+    let proxy = match proxy { Ok(p) => p, Err(e) => { eprintln!("cook_mode: proxy-feil: {e}"); return; } };
+    if on {
+        if let Some(c) = cookie.take() {
+            let _ = proxy.call_method("UnInhibit", &(c));
+        }
+        match proxy.call_method("Inhibit", &("kokt.nok", "Matlaging")) {
+            Ok(reply) => { if let Ok(c) = reply.body().deserialize::<u32>() { *cookie = Some(c); } }
+            Err(e) => eprintln!("cook_mode: Inhibit feilet: {e}"),
+        }
+    } else if let Some(c) = cookie.take() {
+        let _ = proxy.call_method("UnInhibit", &(c));
+    }
+}
+
+#[tauri::command]
+fn cook_mode(
+    #[allow(unused_variables)] app: AppHandle,
+    on: bool,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        sett_keep_awake(on);
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let state = app.state::<CookModeState>();
+        sett_keep_awake_linux(on, &state);
+    }
+    Ok(())
+}
+
 // ─── Kommando: kategorier ──────────────────────────────────────────────────────
 #[tauri::command]
 fn get_kategorier(app: AppHandle, dietter: Option<Vec<String>>) -> Result<Vec<Value>, String> {
@@ -544,6 +609,7 @@ fn bilde_kataloger(app: &AppHandle) -> Vec<PathBuf> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(CookModeState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .register_uri_scheme_protocol("kbilde", |ctx, request| {
@@ -568,7 +634,8 @@ pub fn run() {
             get_kategorier,
             hent_oppskrifter,
             hent_oppskrift,
-            hent_oppskrifter_by_ids
+            hent_oppskrifter_by_ids,
+            cook_mode
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
