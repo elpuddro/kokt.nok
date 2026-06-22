@@ -9,6 +9,8 @@
   import { temaLast, temaSett, aktivtTema, gjeldendeTema, TEMAER, type TemaId, type Lagret } from "$lib/tema";
   import { notaterLast, notatSett } from "$lib/notater";
   import { diettLast, diettSett, DIETT_FILTRE } from "$lib/diett";
+  import { lagerLast, lagerLeggTil, lagerFjern, lagerTøm, type LagerVare } from "$lib/lager";
+  import { utlopsStatus } from "$lib/lager-logikk";
   import { finnTider } from "$lib/tid-parsing";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
@@ -43,6 +45,13 @@
   let notater = $state<Record<number, string>>({});
   let notatTimer: any;
   let aktiveDietter = $state<string[]>([]);
+  let lager = $state<LagerVare[]>([]);
+  let lagerForslag = $state<any[]>([]);
+  let lagerForslagTimer: any = null;
+  let nyVareNavn = $state("");
+  let nyVareUtloper = $state("");
+  let autoForslag = $state<string[]>([]);
+  let autoTimer: any = null;
   let cookModeAktiv = $state(false);
   type Timer = { id: number; navn: string; igjen: number; total: number; ferdig: boolean; pauset: boolean };
   let timere = $state<Timer[]>([]);
@@ -180,6 +189,32 @@
     side = 1;
     sok = "";
     oppskrifter = [];
+  }
+
+  function velgKjøleskap() {
+    currentKategori = "__lager__";
+    side = 1;
+    sok = "";
+    oppskrifter = [];
+    oppdaterLagerForslag();
+  }
+
+  async function fjernVare(navn: string) {
+    lager = await lagerFjern(navn, lager);
+    oppdaterLagerForslag();
+  }
+  async function tømLager() {
+    lager = await lagerTøm();
+    lagerForslag = [];
+  }
+  function oppdaterLagerForslag() {
+    clearTimeout(lagerForslagTimer);
+    lagerForslagTimer = setTimeout(async () => {
+      if (lager.length === 0) { lagerForslag = []; return; }
+      try {
+        lagerForslag = await invoke("hva_kan_jeg_lage", { varer: lager.map((v) => v.navn) });
+      } catch (e) { console.error("hva_kan_jeg_lage feilet:", e); lagerForslag = []; }
+    }, 300);
   }
 
   function applyTema(id: TemaId) {
@@ -466,6 +501,7 @@
     applyTema(aktivtTema(temaValg, new Date()));
     notater = await notaterLast();
     aktiveDietter = await diettLast();
+    lager = await lagerLast();
     kategorier = await invoke("get_kategorier", { dietter: aktiveDietter });
     await fetchGrid();
   });
@@ -484,7 +520,7 @@
     <span class="logo-text">Kokebok</span>
   </div>
 
-  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__"}
+  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__"}
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
       <input
@@ -528,6 +564,15 @@
     </button>
     <button
       class="kat-btn"
+      class:active={currentKategori === "__lager__"}
+      onclick={velgKjøleskap}
+    >
+      <span class="kat-emoji">🧊</span>
+      <span class="kat-navn">Kjøleskap</span>
+      <span class="kat-teller">{lager.length}</span>
+    </button>
+    <button
+      class="kat-btn"
       class:active={currentKategori === "__innst__"}
       onclick={velgInnstillinger}
     >
@@ -557,6 +602,8 @@
         ⚙️ Innstillinger
       {:else if currentKategori === "__handle__"}
         🛒 Handleliste
+      {:else if currentKategori === "__lager__"}
+        🧊 Kjøleskap
       {:else if currentKategori === "__fav__"}
         ⭐ Favoritter
       {:else if currentKategori === "alle"}
@@ -565,7 +612,7 @@
         {currentKategori}
       {/if}
     </h1>
-    {#if currentKategori !== "__innst__"}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__"}
     <span id="header-antall" class="count-badge">
       {#if currentKategori === "__handle__"}
         {handleliste.length} oppskrifter
@@ -574,7 +621,7 @@
       {/if}
     </span>
     {/if}
-    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__"}
+    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__" && currentKategori !== "__lager__"}
       <button class="diett-pille" onclick={() => (currentKategori = "__innst__")}>
         🍽️ {aktiveDietter.length} {aktiveDietter.length === 1 ? "filter" : "filtre"} aktive
       </button>
@@ -676,7 +723,38 @@
     </div>
   {/if}
 
-  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__"}
+  {#if currentKategori === "__lager__"}
+    <div id="lager-wrap">
+      <section class="lager-rediger">
+        <h2>Mitt kjøleskap</h2>
+        <p class="innst-hint">Legg til varer du har, så foreslår vi oppskrifter under.</p>
+        <!-- autocomplete-input fylles i T5 -->
+        {#if lager.length === 0}
+          <p class="lager-tom">Ingen varer registrert ennå.</p>
+        {:else}
+          <ul class="lager-liste">
+            {#each lager as v (v.navn)}
+              {@const st = utlopsStatus(v.utloper, new Date().toISOString().slice(0, 10))}
+              <li class="lager-vare" class:utgaatt={st === "utgått"} class:snart={st === "snart"}>
+                <span class="lager-navn">{v.navn}</span>
+                {#if v.utloper}<span class="lager-utlop">
+                  {st === "utgått" ? "⚠ utgått" : st === "snart" ? "⚠ går ut snart" : ""} {v.utloper}
+                </span>{/if}
+                <button class="lager-fjern" title="Fjern" onclick={() => fjernVare(v.navn)}>✕</button>
+              </li>
+            {/each}
+          </ul>
+          <button class="lager-tom-btn" onclick={tømLager}>🗑 Tøm kjøleskap</button>
+        {/if}
+      </section>
+      <section class="lager-forslag">
+        <h2>Hva kan jeg lage?</h2>
+        <!-- forslagsliste fylles i T5 -->
+      </section>
+    </div>
+  {/if}
+
+  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__"}
   <div id="grid-wrap">
     <div id="recipe-grid">
       {#if oppskrifter.length === 0}
@@ -725,7 +803,7 @@
       {/if}
     </div>
 
-    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && pages > 1}
+    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && pages > 1}
       <div id="pagination">
         <button class="page-btn" disabled={side === 1} onclick={() => gåTilSide(side - 1)}>‹</button>
         {#each pageNums as p, idx (p)}
@@ -1171,6 +1249,24 @@
     font-size: 0.82rem; cursor: pointer;
   }
   .diett-pille:hover { border-color: var(--border-focus); }
+  #lager-wrap { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: 760px; }
+  .lager-rediger, .lager-forslag { margin-bottom: 28px; }
+  .lager-liste { list-style: none; padding: 0; }
+  .lager-vare {
+    display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+    border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 6px;
+    background: var(--surface);
+  }
+  .lager-navn { flex: 1; font-weight: 600; }
+  .lager-utlop { font-size: 0.82rem; color: var(--text-muted); }
+  .lager-vare.snart { border-color: #d8821a; }
+  .lager-vare.snart .lager-utlop { color: #d8821a; }
+  .lager-vare.utgaatt { border-color: #c0392b; }
+  .lager-vare.utgaatt .lager-utlop { color: #c0392b; font-weight: 700; }
+  .lager-fjern { border: none; background: none; cursor: pointer; color: var(--text-muted); font-size: 1rem; }
+  .lager-fjern:hover { color: var(--text); }
+  .lager-tom, .lager-tom-btn { color: var(--text-muted); }
+  .lager-tom-btn { border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); padding: 6px 12px; cursor: pointer; margin-top: 4px; }
   .empty-hint { font-size: 0.85rem; opacity: 0.7; margin-top: 6px; }
   .beta-merke {
     font-size: 0.6rem; font-weight: 700; letter-spacing: 0.5px;
