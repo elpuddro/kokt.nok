@@ -124,3 +124,16 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-17.
     matching av vinens mat-beskrivelse mot oppskriftens ingredienser, robusthet
     mot endringer i nettsiden. Ikke designet ennå — krever brainstorming. Lagt
     til 2026-06-22.
+
+20. **Næringsanalyse og helseprofil** — bruker legger inn høyde, vekt og
+    aktivitetsnivå (gange, jogging, vektløfting m.fl.); appen beregner BMI og
+    TDEE (Mifflin-St Jeor + aktivitetsfaktor) regelbasert uten AI. Bruker angir
+    mål (vektnedgang/vedlikehold/vektøkning). Appen analyserer oppskrifter mot
+    profilen og gir ukesforslag (bygger på matplanleggeren #15, drevet av TDEE
+    i stedet for manuelt kalorimål). Viser: kalorier, protein, karbohydrat, fett,
+    fiber, vitaminer (vitaminer krever utvidelse av naering-tabellen fra
+    Matvaretabellen.no). Kan tilpasses: lavkarbo, vegetar, vegan, glutenfri,
+    diabetesvennlig (bygger på eksisterende kosthold-filter #9/#10).
+    **Skjult kostnad:** vitamin-kolonner i naering mangler i dag; ny
+    brukerprofil-datamodell (Tauri Store); TDEE-formel er trivielt regelbasert.
+    Lagt til 2026-06-22.
