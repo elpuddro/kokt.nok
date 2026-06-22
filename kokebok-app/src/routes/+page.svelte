@@ -934,7 +934,7 @@
           <tbody>
             {#each plan.dager as d, dag (dag)}
               {@const dagnavn = ["Man","Tir","Ons","Tor","Fre","Lør","Søn"][dag]}
-              {@const avvik = d.kcalDag != null ? Math.abs(d.kcalDag - planDagsmaal) / planDagsmaal : null}
+              {@const avvik = d.kcalDag != null ? Math.abs(d.kcalDag - plan.dagsmaal) / plan.dagsmaal : null}
               <tr>
                 <td class="plan-dag">{dagnavn}</td>
                 {#each ["frokost","lunsj","middag","kveldsmat"] as slot (slot)}

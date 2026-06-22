@@ -989,7 +989,11 @@ fn generer_matplan(
         let mut best_s = f64::NEG_INFINITY;
         for k in kandidater {
             if bid.contains(&k.id) { continue; }
-            let jitter = ((k.id as f64 * 2.399_963 + teller) % 1.0) * 10.0;
+            let now_ns = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.subsec_nanos() as f64)
+                .unwrap_or(0.0);
+            let jitter = ((k.id as f64 * 2.399_963 + teller + now_ns) % 1.0) * 10.0;
             let s = score(k, m, bt, bi, jitter);
             if s > best_s { best_s = s; best = Some(k); }
         }
