@@ -10,6 +10,7 @@
   import { notaterLast, notatSett } from "$lib/notater";
   import { diettLast, diettSett, DIETT_FILTRE } from "$lib/diett";
   import { lagerLast, lagerLeggTil, lagerFjern, lagerTøm, type LagerVare } from "$lib/lager";
+  import { matplanLast, matplanLagre, matplanTøm, type Uke, type Dag } from "$lib/matplan";
   import { utlopsStatus } from "$lib/lager-logikk";
   import { finnTider } from "$lib/tid-parsing";
 
@@ -52,6 +53,10 @@
   let nyVareUtloper = $state("");
   let autoForslag = $state<string[]>([]);
   let autoTimer: any = null;
+  let plan = $state<Uke | null>(null);
+  let planDagsmaal = $state(2000);
+  let planPersoner = $state(2);
+  let planLaster = $state(false);
   let cookModeAktiv = $state(false);
   type Timer = { id: number; navn: string; igjen: number; total: number; ferdig: boolean; pauset: boolean };
   let timere = $state<Timer[]>([]);
@@ -197,6 +202,70 @@
     sok = "";
     oppskrifter = [];
     oppdaterLagerForslag();
+  }
+
+  function velgMatplan() {
+    currentKategori = "__plan__";
+    side = 1;
+    sok = "";
+    oppskrifter = [];
+  }
+
+  type LaastSlot = { dag: number; slot: string; id: number };
+  function samleLaaste(): LaastSlot[] {
+    if (!plan) return [];
+    const ut: LaastSlot[] = [];
+    plan.dager.forEach((d, dag) => {
+      for (const slot of ["frokost", "lunsj", "middag", "kveldsmat"] as const) {
+        const s = (d as any)[slot];
+        if (s?.kind === "rett" && s.laast) ut.push({ dag, slot, id: s.id });
+      }
+    });
+    return ut;
+  }
+
+  async function genererPlan() {
+    planLaster = true;
+    try {
+      const uke = await invoke<Uke>("generer_matplan", {
+        dagsmaal: planDagsmaal,
+        personer: planPersoner,
+        dietter: aktiveDietter,
+        laaste: samleLaaste(),
+      });
+      plan = uke;
+    } catch (e) {
+      console.error("generer_matplan feilet:", e);
+    } finally {
+      planLaster = false;
+    }
+  }
+
+  function toggleLaas(dag: number, slot: string) {
+    if (!plan) return;
+    const s = (plan.dager[dag] as any)[slot];
+    if (s?.kind === "rett") { s.laast = !s.laast; plan = { ...plan }; }
+  }
+  async function sendUkaTilHandleliste() {
+    if (!plan) return;
+    let lagtTil = 0;
+    for (const d of plan.dager) {
+      for (const slot of ["frokost", "lunsj", "middag", "kveldsmat"] as const) {
+        const s = (d as any)[slot];
+        if (s?.kind === "rett") {
+          // porsjoner skaleres på antall personer (gjenbruker eksisterende handleliste-skalering)
+          handleliste = await handlelisteLeggTil(s.id, planPersoner, handleliste);
+          lagtTil++;
+        }
+      }
+    }
+    alert(`La ${lagtTil} retter i handlelista (porsjoner = ${planPersoner}).`);
+  }
+
+  async function lagreUka() {
+    if (!plan) return;
+    await matplanLagre(plan);
+    alert("Ukemenyen er lagret.");
   }
 
   async function fjernVare(navn: string) {
@@ -535,6 +604,7 @@
     notater = await notaterLast();
     aktiveDietter = await diettLast();
     lager = await lagerLast();
+    plan = await matplanLast();
     kategorier = await invoke("get_kategorier", { dietter: aktiveDietter });
     await fetchGrid();
   });
@@ -553,7 +623,7 @@
     <span class="logo-text">Kokebok</span>
   </div>
 
-  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__"}
+  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
       <input
@@ -606,6 +676,14 @@
     </button>
     <button
       class="kat-btn"
+      class:active={currentKategori === "__plan__"}
+      onclick={velgMatplan}
+    >
+      <span class="kat-emoji">📅</span>
+      <span class="kat-navn">Matplan</span>
+    </button>
+    <button
+      class="kat-btn"
       class:active={currentKategori === "__innst__"}
       onclick={velgInnstillinger}
     >
@@ -637,6 +715,8 @@
         🛒 Handleliste
       {:else if currentKategori === "__lager__"}
         🧊 Kjøleskap
+      {:else if currentKategori === "__plan__"}
+        📅 Matplan
       {:else if currentKategori === "__fav__"}
         ⭐ Favoritter
       {:else if currentKategori === "alle"}
@@ -645,7 +725,7 @@
         {currentKategori}
       {/if}
     </h1>
-    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__"}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
     <span id="header-antall" class="count-badge">
       {#if currentKategori === "__handle__"}
         {handleliste.length} oppskrifter
@@ -654,7 +734,7 @@
       {/if}
     </span>
     {/if}
-    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__" && currentKategori !== "__lager__"}
+    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
       <button class="diett-pille" onclick={() => (currentKategori = "__innst__")}>
         🍽️ {aktiveDietter.length} {aktiveDietter.length === 1 ? "filter" : "filtre"} aktive
       </button>
@@ -825,7 +905,70 @@
     </div>
   {/if}
 
-  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__"}
+  {#if currentKategori === "__plan__"}
+    <div id="plan-wrap">
+      <div class="plan-kontroll">
+        <label>Dagsmål (kcal)
+          <input type="number" min="800" max="5000" step="50" bind:value={planDagsmaal} />
+        </label>
+        <label>Personer
+          <input type="number" min="1" max="12" step="1" bind:value={planPersoner} />
+        </label>
+        {#if aktiveDietter.length > 0}
+          <span class="plan-filter-merke">🍽️ {aktiveDietter.length} filtre aktive</span>
+        {/if}
+        <button class="plan-generer" onclick={genererPlan} disabled={planLaster}>
+          {planLaster ? "Genererer…" : "↻ Generer"}
+        </button>
+      </div>
+
+      {#if !plan}
+        <p class="lager-tom">Sett dagsmål og personer, og trykk «Generer».</p>
+      {:else}
+        <table class="plan-tabell">
+          <thead>
+            <tr>
+              <th></th><th>🍳 Frokost</th><th>🥪 Lunsj</th><th>🍽️ Middag</th><th>🌙 Kveldsmat</th><th>kcal/dag</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each plan.dager as d, dag (dag)}
+              {@const dagnavn = ["Man","Tir","Ons","Tor","Fre","Lør","Søn"][dag]}
+              {@const avvik = d.kcalDag != null ? Math.abs(d.kcalDag - plan.dagsmaal) / plan.dagsmaal : null}
+              <tr>
+                <td class="plan-dag">{dagnavn}</td>
+                {#each ["frokost","lunsj","middag","kveldsmat"] as slot (slot)}
+                  {@const s = (d as any)[slot]}
+                  <td class="plan-celle">
+                    {#if s.kind === "rett"}
+                      <button class="plan-rett" onclick={() => åpneOppskrift(s.id)}>{s.navn}</button>
+                      <button class="plan-ikon" class:laast={s.laast} title="Lås/lås opp" onclick={() => toggleLaas(dag, slot)}>{s.laast ? "🔒" : "🔓"}</button>
+                    {:else if s.kind === "rester"}
+                      <span class="plan-rester">{s.visTekst}</span>
+                    {:else if s.kind === "enkel"}
+                      <span class="plan-enkel">{s.visTekst}</span>
+                    {:else}
+                      <span class="plan-tom-celle">{s.grunn}</span>
+                    {/if}
+                  </td>
+                {/each}
+                <td class="plan-kcal" class:naer={avvik != null && avvik <= 0.15} class:unna={avvik != null && avvik > 0.15}>
+                  {d.kcalDag != null ? `~${Math.round(d.kcalDag)}` : "?"}
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        <div class="plan-knapper">
+          <button class="plan-generer" onclick={genererPlan} disabled={planLaster}>↻ Generer ulåste på nytt</button>
+          <button class="plan-handle" onclick={sendUkaTilHandleliste}>🛒 Send uka til handleliste</button>
+          <button class="plan-lagre" onclick={lagreUka}>💾 Lagre uka</button>
+        </div>
+      {/if}
+    </div>
+  {/if}
+
+  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
   <div id="grid-wrap">
     <div id="recipe-grid">
       {#if oppskrifter.length === 0}
@@ -874,7 +1017,7 @@
       {/if}
     </div>
 
-    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && pages > 1}
+    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && pages > 1}
       <div id="pagination">
         <button class="page-btn" disabled={side === 1} onclick={() => gåTilSide(side - 1)}>‹</button>
         {#each pageNums as p, idx (p)}
@@ -1355,6 +1498,27 @@
   .lager-auto-liste button:hover { background: var(--card-hover); }
   .lager-dato { padding: 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
   .lager-legg { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: var(--radius); padding: 8px 14px; cursor: pointer; }
+  #plan-wrap { flex: 1; overflow-y: auto; padding: 24px 32px; }
+  .plan-kontroll { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 18px; }
+  .plan-kontroll label { display: flex; flex-direction: column; font-size: 0.82rem; gap: 4px; color: var(--text-muted); }
+  .plan-kontroll input { padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); width: 110px; }
+  .plan-filter-merke { font-size: 0.82rem; color: var(--text-muted); align-self: center; }
+  .plan-generer, .plan-handle, .plan-lagre { border: 1px solid var(--accent); background: var(--accent); color: #fff; border-radius: var(--radius); padding: 8px 14px; cursor: pointer; }
+  .plan-handle, .plan-lagre { background: var(--surface); color: var(--text); border-color: var(--border); }
+  .plan-generer:disabled { opacity: 0.6; cursor: default; }
+  .plan-tabell { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  .plan-tabell th { text-align: left; padding: 8px; border-bottom: 2px solid var(--border); }
+  .plan-celle { border: 1px solid var(--border); padding: 6px 8px; vertical-align: top; }
+  .plan-dag { font-weight: 700; padding: 6px 8px; }
+  .plan-rett { border: none; background: none; color: var(--text); cursor: pointer; text-align: left; padding: 0; font: inherit; text-decoration: underline; text-decoration-color: var(--border); }
+  .plan-rett:hover { text-decoration-color: var(--accent); }
+  .plan-ikon { border: none; background: none; cursor: pointer; font-size: 0.9rem; }
+  .plan-rester, .plan-enkel { color: var(--text-muted); font-style: italic; }
+  .plan-tom-celle { color: #c0392b; font-size: 0.8rem; }
+  .plan-kcal { text-align: right; padding: 6px 8px; font-variant-numeric: tabular-nums; }
+  .plan-kcal.naer { color: #2a8a4a; }
+  .plan-kcal.unna { color: #d8821a; }
+  .plan-knapper { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
   .forslag-gruppe-tittel { font-weight: 700; margin: 16px 0 8px; color: var(--text); }
   .forslag-rad {
     display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
