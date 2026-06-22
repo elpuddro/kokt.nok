@@ -606,6 +606,145 @@ fn bilde_kataloger(app: &AppHandle) -> Vec<PathBuf> {
     ut
 }
 
+// ─── Lager / «hva kan jeg lage» ─────────────────────────────────────────────────
+// Staples = «har alltid», teller verken som dekket eller mangel.
+// VIKTIG (verifisert mot DB): naken delstreng «mel» fanger «melk»/«karamell»/
+// «marmelade» → forbudt. Vi bruker EKSAKT ord-match mot en utvidet staple-liste,
+// pluss en trygg suffiks-sjekk KUN for «olje»/«salt»/«pepper» (disse tre har
+// ingen melk-lignende kollisjon). «melk»/«melkesjokolade»/«eplemost» = IKKE staple.
+fn er_staple(navn_lower: &str) -> bool {
+    const STAPLE_ORD: &[&str] = &[
+        "salt", "pepper", "vann", "sukker", "smør",
+        "hvetemel", "rugmel", "sammalt", "semulegryn", "melis",
+        "olje", "olivenolje", "rapsolje", "solsikkeolje", "maisolje", "frityrolje",
+        "nøytral", "kvernet", "flaksalt", "havsalt", "grovsalt",
+    ];
+    let ord: Vec<&str> = navn_lower
+        .split(|c: char| !c.is_alphabetic())
+        .filter(|w| !w.is_empty())
+        .collect();
+    if ord.iter().any(|w| STAPLE_ORD.contains(w)) {
+        return true;
+    }
+    // Trygge suffikser (sammensatt som ETT ord): «xolje»/«xsalt»/«xpepper».
+    ord.iter().any(|w| {
+        (w.ends_with("olje") || w.ends_with("salt") || w.ends_with("pepper")) && w.len() > 4
+    })
+}
+
+#[tauri::command]
+fn ingrediens_forslag(app: AppHandle, prefiks: String) -> Result<Vec<String>, String> {
+    let p = prefiks.trim().to_lowercase();
+    if p.len() < 2 {
+        return Ok(vec![]);
+    }
+    let conn = open(&app)?;
+    // Prioriter de som STARTER med prefikset, så de som inneholder det.
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT navn FROM ingredienser \
+             WHERE navn IS NOT NULL AND LOWER(navn) LIKE ?1 \
+             ORDER BY CASE WHEN LOWER(navn) LIKE ?2 THEN 0 ELSE 1 END, navn COLLATE NOCASE \
+             LIMIT 10",
+        )
+        .map_err(|e| e.to_string())?;
+    let inneholder = format!("%{p}%");
+    let starter = format!("{p}%");
+    let rader = stmt
+        .query_map([&inneholder, &starter], |r| r.get::<_, String>(0))
+        .map_err(|e| e.to_string())?;
+    Ok(rader.filter_map(|r| r.ok()).collect())
+}
+
+#[derive(Serialize)]
+struct Forslag {
+    id: i64,
+    navn: String,
+    #[serde(rename = "type")]
+    type_: Option<String>,
+    bilde: Option<String>,
+    totalt: i64,
+    dekket: i64,
+    mangler: Vec<String>,
+}
+
+#[tauri::command]
+fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, String> {
+    let varer: Vec<String> = varer.iter().map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty()).collect();
+    if varer.is_empty() {
+        return Ok(vec![]);
+    }
+    let conn = open(&app)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT o.id, o.navn, o.type, o.bilde, i.navn \
+             FROM oppskrifter o JOIN ingredienser i ON i.oppskrift_id = o.id \
+             WHERE i.navn IS NOT NULL AND i.navn != '' \
+             ORDER BY o.id",
+        )
+        .map_err(|e| e.to_string())?;
+    let rader = stmt
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, i64>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, Option<String>>(3)?,
+                r.get::<_, String>(4)?,
+            ))
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut ut: Vec<Forslag> = Vec::new();
+    let mut cur: Option<(i64, String, Option<String>, Option<String>)> = None;
+    let mut totalt = 0i64;
+    let mut dekket = 0i64;
+    let mut mangler: Vec<String> = Vec::new();
+
+    let dekkes = |ing_lower: &str| -> bool {
+        varer.iter().any(|v| ing_lower.contains(v.as_str()) || v.contains(ing_lower))
+    };
+    macro_rules! flush {
+        () => {
+            if let Some((id, navn, typ, bilde)) = cur.take() {
+                if dekket > 0 {
+                    ut.push(Forslag { id, navn, type_: typ, bilde, totalt, dekket, mangler: std::mem::take(&mut mangler) });
+                } else {
+                    mangler.clear();
+                }
+                totalt = 0; dekket = 0;
+            }
+        };
+    }
+
+    for row in rader.filter_map(|r| r.ok()) {
+        let (id, onavn, otype, obilde, inavn) = row;
+        if cur.as_ref().map(|c| c.0) != Some(id) {
+            flush!();
+            cur = Some((id, onavn, otype, obilde));
+        }
+        let il = inavn.to_lowercase();
+        if er_staple(&il) {
+            continue;
+        }
+        totalt += 1;
+        if dekkes(&il) {
+            dekket += 1;
+        } else {
+            mangler.push(inavn);
+        }
+    }
+    flush!();
+
+    ut.sort_by(|a, b| {
+        (a.totalt - a.dekket).cmp(&(b.totalt - b.dekket))
+            .then(b.dekket.cmp(&a.dekket))
+            .then(a.navn.to_lowercase().cmp(&b.navn.to_lowercase()))
+    });
+    ut.truncate(60);
+    Ok(ut)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -635,7 +774,9 @@ pub fn run() {
             hent_oppskrifter,
             hent_oppskrift,
             hent_oppskrifter_by_ids,
-            cook_mode
+            cook_mode,
+            ingrediens_forslag,
+            hva_kan_jeg_lage
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
