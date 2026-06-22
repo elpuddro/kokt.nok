@@ -115,3 +115,12 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-17.
     sammenligne/gjenopprette/bla bakover. **Skjult kostnad:** skrivbar versjonert
     datamodell (diff/historikk per oppskrift) + diff-UI. Bygger på «egne
     oppskrifter»-utvidelsen nevnt under notater (#7). Ingen AI.
+
+19. **Vinanbefaling fra Vinmonopolet** — skrap salgbare produkter fra
+    vinmonopolet.no (filtrert til «kan kjøpes» / leveres på post/dør, 18-års
+    aldersgrense) og match viner mot oppskrifter via Vinmonopolets egne
+    mat-/ingrediens-beskrivelser. Foreslå vin som passer en oppskrifts råvarer.
+    **Skjult kostnad:** ny skraper + datakilde (vin-tabell + mat-match-felt),
+    matching av vinens mat-beskrivelse mot oppskriftens ingredienser, robusthet
+    mot endringer i nettsiden. Ikke designet ennå — krever brainstorming. Lagt
+    til 2026-06-22.
