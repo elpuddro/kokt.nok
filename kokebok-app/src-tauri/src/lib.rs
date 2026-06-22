@@ -662,7 +662,6 @@ struct Forslag {
     navn: String,
     #[serde(rename = "type")]
     type_: Option<String>,
-    bilde: Option<String>,
     totalt: i64,
     dekket: i64,
     mangler: Vec<String>,
@@ -677,7 +676,7 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
     let conn = open(&app)?;
     let mut stmt = conn
         .prepare(
-            "SELECT o.id, o.navn, o.type, o.bilde, i.navn \
+            "SELECT o.id, o.navn, o.type, i.navn \
              FROM oppskrifter o JOIN ingredienser i ON i.oppskrift_id = o.id \
              WHERE i.navn IS NOT NULL AND i.navn != '' \
              ORDER BY o.id",
@@ -689,14 +688,13 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
                 r.get::<_, i64>(0)?,
                 r.get::<_, String>(1)?,
                 r.get::<_, Option<String>>(2)?,
-                r.get::<_, Option<String>>(3)?,
-                r.get::<_, String>(4)?,
+                r.get::<_, String>(3)?,
             ))
         })
         .map_err(|e| e.to_string())?;
 
     let mut ut: Vec<Forslag> = Vec::new();
-    let mut cur: Option<(i64, String, Option<String>, Option<String>)> = None;
+    let mut cur: Option<(i64, String, Option<String>)> = None;
     let mut totalt = 0i64;
     let mut dekket = 0i64;
     let mut mangler: Vec<String> = Vec::new();
@@ -706,9 +704,9 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
     };
     macro_rules! flush {
         () => {
-            if let Some((id, navn, typ, bilde)) = cur.take() {
+            if let Some((id, navn, typ)) = cur.take() {
                 if dekket > 0 {
-                    ut.push(Forslag { id, navn, type_: typ, bilde, totalt, dekket, mangler: std::mem::take(&mut mangler) });
+                    ut.push(Forslag { id, navn, type_: typ, totalt, dekket, mangler: std::mem::take(&mut mangler) });
                 } else {
                     mangler.clear();
                 }
@@ -718,10 +716,10 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
     }
 
     for row in rader.filter_map(|r| r.ok()) {
-        let (id, onavn, otype, obilde, inavn) = row;
+        let (id, onavn, otype, inavn) = row;
         if cur.as_ref().map(|c| c.0) != Some(id) {
             flush!();
-            cur = Some((id, onavn, otype, obilde));
+            cur = Some((id, onavn, otype));
         }
         let il = inavn.to_lowercase();
         if er_staple(&il) {
