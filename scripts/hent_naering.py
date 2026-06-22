@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS naering (
     karbohydrat_g    REAL,
     fiber_g          REAL
 );
+CREATE INDEX IF NOT EXISTS idx_naering_lower ON naering(LOWER(TRIM(ingredient_navn)));
 """
 
 # Nutrient IDs i Matvaretabellen.no

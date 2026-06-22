@@ -567,11 +567,11 @@
     const n = currentOppskrift?.naering;
     if (!n || !(n.energi > 0)) return null;
     return {
-      e: Math.round(n.energi / curP),
-      p: Math.round((n.protein / curP) * 10) / 10,
-      f: Math.round((n.fett / curP) * 10) / 10,
-      k: Math.round((n.karbohydrat / curP) * 10) / 10,
-      fi: n.fiber ? Math.round((n.fiber / curP) * 10) / 10 : null,
+      e: Math.round(n.energi / origP),
+      p: Math.round((n.protein / origP) * 10) / 10,
+      f: Math.round((n.fett / origP) * 10) / 10,
+      k: Math.round((n.karbohydrat / origP) * 10) / 10,
+      fi: n.fiber ? Math.round((n.fiber / origP) * 10) / 10 : null,
       treff: n.treff, totalt: n.totalt,
     };
   });

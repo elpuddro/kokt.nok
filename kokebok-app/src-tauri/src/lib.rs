@@ -818,41 +818,6 @@ struct Kandidat {
     ingredienser: Vec<String>,
 }
 
-// kcal/porsjon for én oppskrift — samme enhet→gram→kcal-CASE som hent_oppskrift.
-fn kcal_per_porsjon(conn: &Connection, id: i64) -> Option<f64> {
-    let sql = "
-        SELECT
-          ROUND(SUM(CASE i.enhet
-            WHEN 'g'  THEN i.mengde        * COALESCE(n.energi_kcal,0)/100
-            WHEN 'kg' THEN i.mengde*1000   * COALESCE(n.energi_kcal,0)/100
-            WHEN 'dl' THEN i.mengde*100    * COALESCE(n.energi_kcal,0)/100
-            WHEN 'l'  THEN i.mengde*1000   * COALESCE(n.energi_kcal,0)/100
-            WHEN 'ml' THEN i.mengde        * COALESCE(n.energi_kcal,0)/100
-            WHEN 'ss' THEN i.mengde*15     * COALESCE(n.energi_kcal,0)/100
-            WHEN 'ts' THEN i.mengde*5      * COALESCE(n.energi_kcal,0)/100
-            ELSE 0 END)) AS energi,
-          COUNT(n.ingredient_navn) AS treff,
-          (SELECT porsjoner FROM oppskrifter WHERE id = ?1) AS porsjoner
-        FROM ingredienser i
-        LEFT JOIN naering n ON LOWER(TRIM(i.navn)) = LOWER(TRIM(n.ingredient_navn))
-        WHERE i.oppskrift_id = ?1";
-    conn.query_row(sql, [id], |r| {
-        let energi: Option<f64> = r.get(0)?;
-        let treff: i64 = r.get(1)?;
-        let porsjoner: Option<f64> = r.get(2)?;
-        Ok((energi, treff, porsjoner))
-    })
-    .ok()
-    .and_then(|(energi, treff, porsjoner)| {
-        // Krev minst ett næringstreff og energi > 0 for å regne kcal som «kjent».
-        if treff == 0 { return None; }
-        let e = energi?;
-        if e <= 0.0 { return None; }
-        let p = porsjoner.filter(|p| *p > 0.0).unwrap_or(4.0);
-        Some((e / p * 10.0).round() / 10.0)
-    })
-}
-
 // Hent kvalifiserte kandidater for én slot: mapper til slot + passer diett-filtre.
 fn kandidater_for_slot(
     conn: &Connection,
@@ -897,24 +862,81 @@ fn kandidater_for_slot(
         Err(_) => return vec![],
     };
 
-    let mut ut: Vec<Kandidat> = Vec::new();
+    // Samle alle kandidater først (ID, navn, type).
+    let mut basis: Vec<(i64, String, String)> = Vec::new();
     for row in rader.filter_map(|r| r.ok()) {
-        let (id, navn, type_) = row;
-        let kcal = kcal_per_porsjon(conn, id);
-        // Ingrediensnavn (for gjenbruks-scoring).
-        let mut ings: Vec<String> = Vec::new();
-        if let Ok(mut istmt) = conn.prepare(
-            "SELECT navn FROM ingredienser WHERE oppskrift_id = ? AND navn IS NOT NULL",
-        ) {
-            if let Ok(irows) = istmt.query_map([id], |r| r.get::<_, String>(0)) {
-                for i in irows.filter_map(|r| r.ok()) {
-                    ings.push(i.to_lowercase());
-                }
+        basis.push(row);
+    }
+    if basis.is_empty() {
+        return vec![];
+    }
+
+    // Bulk-hent kcal og porsjoner for alle kandidater i én query.
+    let id_ph = basis.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+    let ids: Vec<i64> = basis.iter().map(|(id, _, _)| *id).collect();
+    let id_refs: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+
+    let kcal_sql = format!(
+        "SELECT i.oppskrift_id,
+           ROUND(SUM(CASE i.enhet
+             WHEN 'g'  THEN i.mengde        * COALESCE(n.energi_kcal,0)/100
+             WHEN 'kg' THEN i.mengde*1000   * COALESCE(n.energi_kcal,0)/100
+             WHEN 'dl' THEN i.mengde*100    * COALESCE(n.energi_kcal,0)/100
+             WHEN 'l'  THEN i.mengde*1000   * COALESCE(n.energi_kcal,0)/100
+             WHEN 'ml' THEN i.mengde        * COALESCE(n.energi_kcal,0)/100
+             WHEN 'ss' THEN i.mengde*15     * COALESCE(n.energi_kcal,0)/100
+             WHEN 'ts' THEN i.mengde*5      * COALESCE(n.energi_kcal,0)/100
+             ELSE 0 END)) AS energi,
+           COUNT(n.ingredient_navn) AS treff,
+           o.porsjoner
+         FROM ingredienser i
+         LEFT JOIN naering n ON LOWER(TRIM(i.navn)) = LOWER(TRIM(n.ingredient_navn))
+         JOIN oppskrifter o ON o.id = i.oppskrift_id
+         WHERE i.oppskrift_id IN ({id_ph})
+         GROUP BY i.oppskrift_id"
+    );
+    let mut kcal_map: std::collections::HashMap<i64, Option<f64>> = std::collections::HashMap::new();
+    if let Ok(mut stmt) = conn.prepare(&kcal_sql) {
+        if let Ok(rows) = stmt.query_map(id_refs.as_slice(), |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<f64>>(1)?, r.get::<_, i64>(2)?, r.get::<_, Option<f64>>(3)?))
+        }) {
+            for row in rows.filter_map(|r| r.ok()) {
+                let (opp_id, energi, treff, porsjoner) = row;
+                let kcal = if treff > 0 {
+                    energi.filter(|&e| e > 0.0).map(|e| {
+                        let p = porsjoner.filter(|&p| p > 0.0).unwrap_or(4.0);
+                        (e / p * 10.0).round() / 10.0
+                    })
+                } else {
+                    None
+                };
+                kcal_map.insert(opp_id, kcal);
             }
         }
-        ut.push(Kandidat { id, navn, type_, kcal, ingredienser: ings });
     }
-    ut
+
+    // Bulk-hent ingrediensnavn for alle kandidater i én query.
+    let ing_sql = format!(
+        "SELECT oppskrift_id, LOWER(navn) FROM ingredienser \
+         WHERE oppskrift_id IN ({id_ph}) AND navn IS NOT NULL"
+    );
+    let mut ing_map: std::collections::HashMap<i64, Vec<String>> = std::collections::HashMap::new();
+    if let Ok(mut stmt) = conn.prepare(&ing_sql) {
+        if let Ok(rows) = stmt.query_map(id_refs.as_slice(), |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        }) {
+            for row in rows.filter_map(|r| r.ok()) {
+                let (opp_id, navn) = row;
+                ing_map.entry(opp_id).or_default().push(navn);
+            }
+        }
+    }
+
+    basis.into_iter().map(|(id, navn, type_)| {
+        let kcal = kcal_map.get(&id).copied().flatten();
+        let ingredienser = ing_map.remove(&id).unwrap_or_default();
+        Kandidat { id, navn, type_, kcal, ingredienser }
+    }).collect()
 }
 
 // Score (samme formel som matplan-logikk.ts scoreKandidat, jitter via indeks).
@@ -938,6 +960,22 @@ fn score(
     s + jitter
 }
 
+// Minimal xorshift64 PRNG — ingen ekstern crate nødvendig.
+fn xorshift64(state: &mut u64) -> u64 {
+    *state ^= *state << 13;
+    *state ^= *state >> 7;
+    *state ^= *state << 17;
+    *state
+}
+
+fn shuffle<T>(v: &mut Vec<T>, rng: &mut u64) {
+    let n = v.len();
+    for i in (1..n).rev() {
+        let j = (xorshift64(rng) as usize) % (i + 1);
+        v.swap(i, j);
+    }
+}
+
 #[tauri::command]
 fn generer_matplan(
     app: AppHandle,
@@ -957,11 +995,22 @@ fn generer_matplan(
         dagsmaal as f64 * andel
     };
 
-    // Forhåndshent kandidater per slot (én DB-runde per slot-type).
-    let kand_frokost = kandidater_for_slot(&conn, "frokost", &dietter);
-    let kand_lunsj = kandidater_for_slot(&conn, "lunsj", &dietter);
-    let kand_middag = kandidater_for_slot(&conn, "middag", &dietter);
-    let kand_kveld = kandidater_for_slot(&conn, "kveldsmat", &dietter);
+    // Seed fra nåtid — ny for hvert kall, garanterer ulike resultater.
+    let seed_ns = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(12345);
+    let mut rng: u64 = seed_ns | 1; // xorshift64 krever non-zero seed
+
+    // Forhåndshent og shuffle kandidater per slot — ett DB-kall per slot-type.
+    let mut kand_frokost = kandidater_for_slot(&conn, "frokost", &dietter);
+    let mut kand_lunsj = kandidater_for_slot(&conn, "lunsj", &dietter);
+    let mut kand_middag = kandidater_for_slot(&conn, "middag", &dietter);
+    let mut kand_kveld = kandidater_for_slot(&conn, "kveldsmat", &dietter);
+    shuffle(&mut kand_frokost, &mut rng);
+    shuffle(&mut kand_lunsj, &mut rng);
+    shuffle(&mut kand_middag, &mut rng);
+    shuffle(&mut kand_kveld, &mut rng);
 
     let mut brukt_type: HashSet<String> = HashSet::new();
     let mut brukte_ing: HashSet<String> = HashSet::new();
@@ -987,13 +1036,10 @@ fn generer_matplan(
         let m = maal(slot);
         let mut best: Option<&Kandidat> = None;
         let mut best_s = f64::NEG_INFINITY;
-        for k in kandidater {
+        for (i, k) in kandidater.iter().enumerate() {
             if bid.contains(&k.id) { continue; }
-            let now_ns = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.subsec_nanos() as f64)
-                .unwrap_or(0.0);
-            let jitter = ((k.id as f64 * 2.399_963 + teller + now_ns) % 1.0) * 10.0;
+            // Jitter er nå posisjon i den shufflede lista (unik per kall) + id-hash.
+            let jitter = ((i as f64 * 0.137 + k.id as f64 * 2.399_963 + teller) % 1.0) * 10.0;
             let s = score(k, m, bt, bi, jitter);
             if s > best_s { best_s = s; best = Some(k); }
         }
