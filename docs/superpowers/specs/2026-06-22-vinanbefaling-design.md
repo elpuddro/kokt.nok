@@ -35,21 +35,40 @@ CREATE INDEX IF NOT EXISTS idx_viner_varetype ON viner(varetype);
 
 ## Skraper: `scripts/hent_viner.py`
 
-Bruker Vinmonopolets åpne produkt-API. Kjøres én gang av utvikler før bundle-bygg — commites ikke til git (kokt.db er gitignored), men selve skriptfilen commites.
+Bruker Vinmonopolets offisielle produkt-API (`apis.vinmonopolet.no`). Krever en **gratis API-nøkkel** som hentes på `developer.vinmonopolet.no` (registrering, ingen kostnad). Nøkkelen sendes som header `Ocp-Apim-Subscription-Key`. Kjøres én gang av utvikler før bundle-bygg — kokt.db er gitignored men selve skriptfilen commites.
 
-**Kategorier som hentes:**
+**API-endepunkt:** `GET https://apis.vinmonopolet.no/products/v0/details-normal?maxResults=500&start=0`
+Paginerer med `start`-parameter inntil alle produkter er hentet.
+
+**Merk om matpasning:** API-et returnerer `description`-feltet (stilbeskrivelse) som fritekst, f.eks. "Passer til pasta, pizza og lette kjøttretter." Det finnes ingen strukturerte matpasnings-tags. Skraperen ekstraherer nøkkelord fra friteksten med en regelbasert parser og lagrer som JSON-array.
+
+**Fritekst-parser — nøkkelord som mappes til tags:**
+- pasta, pizza, taco, tapas → `pasta`
+- fisk, sjømat, skalldyr, laks, torsk → `fisk`
+- kylling, fjærkre → `fjærkre`
+- lam, vilt, hjort, elg → `vilt`
+- biff, entrecôte, oksekjøtt, storfe → `storfe`
+- svin, ribbe, koteletter → `svin`
+- grønnsaker, vegetar, salat → `grønnsaker`
+- dessert, kake, sjokolade, søtt → `dessert`
+- aperitif, forrett, tapas → `aperitif`
+- asiatisk, wok, thai, indisk → `asiatisk`
+
+Hvis fritekst er tom eller ingen nøkkelord matcher → `matpasning = NULL`.
+
+**Kategorier som hentes** (filtrert på `mainCategory.name`):
 - Rødvin, Hvitvin, Rosévin, Musserende, Dessertvin, Sterkvin
 - Øl og Cider
 - Likør, Aperitif, Brennevin
 
 **Felter som lagres per produkt:**
-- `varenummer` — Vinmonopolets unike ID
+- `varenummer` — Vinmonopolets unike ID (`code`-feltet)
 - `navn` — produktnavn
 - `produsent` — produsent/merkevare
 - `land` — opprinnelsesland
 - `varetype` — normalisert type (se under)
 - `druetype` — druesorter som kommaseparert streng (NULL for øl/likør)
-- `matpasning` — JSON-array av matpasnings-tags fra API
+- `matpasning` — JSON-array av ekstraherte tags (NULL hvis ingen treff)
 
 **Normaliserte varetyper** (brukt for ikon-valg i UI):
 - `rodvin`, `hvitvin`, `rose`, `musserende`, `dessertvin`, `sterkvin`
@@ -58,7 +77,7 @@ Bruker Vinmonopolets åpne produkt-API. Kjøres én gang av utvikler før bundle
 
 **Skjema-mønster:** SCHEMA-konstant med `CREATE TABLE IF NOT EXISTS` + index, kjøres ved oppstart av skriptet (samme som `hent_naering.py`).
 
-**Estimert volum:** ~10 000–15 000 produkter.
+**Estimert volum:** ~15 000 produkter.
 
 ---
 
@@ -97,7 +116,7 @@ struct VinForslag {
    | Forretter, Snacks | aperitif, lett | musserende, aperitif, ol |
    | (fallback) | — | rodvin, hvitvin |
 
-3. **Ingrediens-boost-nøkkelord** — hardkodet map ingrediens-token → matpasnings-tag:
+3. **Ingrediens-boost-nøkkelord** — hardkodet map ingrediens-token → matpasnings-tag (samme normaliserte tags som skraperen bruker):
    - laks, ørret, torsk, sei, hyse → `fisk`
    - reke, krabbe, blåskjell, hummer → `skalldyr`
    - kylling → `fjærkre`
