@@ -246,8 +246,27 @@
     const s = (plan.dager[dag] as any)[slot];
     if (s?.kind === "rett") { s.laast = !s.laast; plan = { ...plan }; }
   }
-  async function sendUkaTilHandleliste() { /* T5 */ }
-  async function lagreUka() { /* T5 */ }
+  async function sendUkaTilHandleliste() {
+    if (!plan) return;
+    let lagtTil = 0;
+    for (const d of plan.dager) {
+      for (const slot of ["frokost", "lunsj", "middag", "kveldsmat"] as const) {
+        const s = (d as any)[slot];
+        if (s?.kind === "rett") {
+          // porsjoner skaleres på antall personer (gjenbruker eksisterende handleliste-skalering)
+          handleliste = await handlelisteLeggTil(s.id, planPersoner, handleliste);
+          lagtTil++;
+        }
+      }
+    }
+    alert(`La ${lagtTil} retter i handlelista (porsjoner = ${planPersoner}).`);
+  }
+
+  async function lagreUka() {
+    if (!plan) return;
+    await matplanLagre(plan);
+    alert("Ukemenyen er lagret.");
+  }
 
   async function fjernVare(navn: string) {
     lager = await lagerFjern(navn, lager);
