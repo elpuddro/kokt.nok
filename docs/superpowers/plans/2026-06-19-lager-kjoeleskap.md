@@ -10,7 +10,7 @@
 
 **Spec:** `docs/superpowers/specs/2026-06-19-lager-kjoeleskap-design.md`
 
-> **`<repo>`** = repo-roten (`c:/Users/elpud/CODE/kokt.nok` lokalt). Linjenumre kan drifte ±5 — bekreft anker ved å lese før redigering.
+> **`<repo>`** = repo-roten (din lokale klone av kokt.nok). Linjenumre kan drifte ±5 — bekreft anker ved å lese før redigering.
 
 ---
 
