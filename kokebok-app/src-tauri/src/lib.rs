@@ -2,7 +2,7 @@
 // Electron-appens main.js til Rust-kommandoer.
 
 use rusqlite::{Connection, OpenFlags};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use serde_json::{Map, Value};
 use std::fs;
 use std::path::PathBuf;
@@ -743,6 +743,326 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
     Ok(ut)
 }
 
+// ─── Matplanlegger ──────────────────────────────────────────────────────────────
+// Kuratert kategori→slot-mapping. En kategori kan høre til flere slots.
+// Dessert/Kaker/Snacks/Koldtbord er bevisst utelatt fra alle måltids-slots.
+fn slot_kategorier(slot: &str) -> &'static [&'static str] {
+    match slot {
+        "frokost" => &["Frokost", "Vafler/pannekaker", "Drikke", "Brød/bakverk"],
+        "lunsj" => &[
+            "Lunsj", "Sandwich/smørbrød", "Salater", "Supper",
+            "Tapas/småretter", "Smårett", "Forrett", "Forretter",
+        ],
+        "middag" => &[
+            "Middag", "Gryter", "Ovnsretter", "Pasta", "Pizza", "Biffer",
+            "Koteletter", "Wok", "Kyllingfilet", "Hele fileter", "Steker",
+            "Panneretter", "Kjøttdeig- og farseretter", "Grillspyd",
+            "Grillet kylling", "Vegetar", "Turmat",
+        ],
+        // kveldsmat: bare ekte smørbrød/pålegg trekkes; faste enkle tekster i tillegg
+        "kveldsmat" => &["Sandwich/smørbrød", "Pålegg"],
+        _ => &[],
+    }
+}
+
+// Faste enkle kveldsmat-forslag (ikke oppskrifter).
+const KVELDSMAT_ENKEL: &[&str] = &[
+    "Brødskive med pålegg", "Ostesmørbrød", "Knekkebrød med pålegg",
+    "Yoghurt med müsli", "Frukt og nøtter",
+];
+
+#[derive(Serialize, Clone)]
+#[serde(tag = "kind")]
+enum SlotSvar {
+    #[serde(rename = "rett")]
+    Rett { id: i64, navn: String, kcal: Option<f64>, laast: bool },
+    #[serde(rename = "rester")]
+    Rester { #[serde(rename = "visTekst")] vis_tekst: String, laast: bool },
+    #[serde(rename = "enkel")]
+    Enkel { #[serde(rename = "visTekst")] vis_tekst: String, laast: bool },
+    #[serde(rename = "tom")]
+    Tom { grunn: String },
+}
+
+#[derive(Serialize)]
+struct DagSvar {
+    frokost: SlotSvar,
+    lunsj: SlotSvar,
+    middag: SlotSvar,
+    kveldsmat: SlotSvar,
+    #[serde(rename = "kcalDag")]
+    kcal_dag: Option<f64>,
+}
+
+#[derive(Serialize)]
+struct UkeSvar {
+    dager: Vec<DagSvar>,
+    dagsmaal: i64,
+    personer: i64,
+    generert: String,
+}
+
+#[derive(Deserialize)]
+struct LaastSlot {
+    dag: usize,
+    slot: String,
+    id: i64,
+}
+
+// En kandidat-rett for en slot, med on-demand kcal/porsjon og ingrediensnavn.
+struct Kandidat {
+    id: i64,
+    navn: String,
+    type_: String,
+    kcal: Option<f64>,
+    ingredienser: Vec<String>,
+}
+
+// kcal/porsjon for én oppskrift — samme enhet→gram→kcal-CASE som hent_oppskrift.
+fn kcal_per_porsjon(conn: &Connection, id: i64) -> Option<f64> {
+    let sql = "
+        SELECT
+          ROUND(SUM(CASE i.enhet
+            WHEN 'g'  THEN i.mengde        * COALESCE(n.energi_kcal,0)/100
+            WHEN 'kg' THEN i.mengde*1000   * COALESCE(n.energi_kcal,0)/100
+            WHEN 'dl' THEN i.mengde*100    * COALESCE(n.energi_kcal,0)/100
+            WHEN 'l'  THEN i.mengde*1000   * COALESCE(n.energi_kcal,0)/100
+            WHEN 'ml' THEN i.mengde        * COALESCE(n.energi_kcal,0)/100
+            WHEN 'ss' THEN i.mengde*15     * COALESCE(n.energi_kcal,0)/100
+            WHEN 'ts' THEN i.mengde*5      * COALESCE(n.energi_kcal,0)/100
+            ELSE 0 END)) AS energi,
+          COUNT(n.ingredient_navn) AS treff,
+          (SELECT porsjoner FROM oppskrifter WHERE id = ?1) AS porsjoner
+        FROM ingredienser i
+        LEFT JOIN naering n ON LOWER(TRIM(i.navn)) = LOWER(TRIM(n.ingredient_navn))
+        WHERE i.oppskrift_id = ?1";
+    conn.query_row(sql, [id], |r| {
+        let energi: Option<f64> = r.get(0)?;
+        let treff: i64 = r.get(1)?;
+        let porsjoner: Option<f64> = r.get(2)?;
+        Ok((energi, treff, porsjoner))
+    })
+    .ok()
+    .and_then(|(energi, treff, porsjoner)| {
+        // Krev minst ett næringstreff og energi > 0 for å regne kcal som «kjent».
+        if treff == 0 { return None; }
+        let e = energi?;
+        if e <= 0.0 { return None; }
+        let p = porsjoner.filter(|p| *p > 0.0).unwrap_or(4.0);
+        Some((e / p * 10.0).round() / 10.0)
+    })
+}
+
+// Hent kvalifiserte kandidater for én slot: mapper til slot + passer diett-filtre.
+fn kandidater_for_slot(
+    conn: &Connection,
+    slot: &str,
+    dietter: &Option<Vec<String>>,
+) -> Vec<Kandidat> {
+    let kats = slot_kategorier(slot);
+    if kats.is_empty() {
+        return vec![];
+    }
+    let kat_ph = kats.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+
+    // Diett-klausuler (gjenbruk eksisterende helper, opp_ref = "o").
+    let mut diett_sql: Vec<String> = Vec::new();
+    let mut owned: Vec<String> = Vec::new();
+    for k in kats {
+        owned.push((*k).to_string());
+    }
+    bygg_diett_filter(conn, dietter, "o", &mut diett_sql, &mut owned);
+    let diett_where = if diett_sql.is_empty() {
+        String::new()
+    } else {
+        format!(" AND {}", diett_sql.join(" AND "))
+    };
+
+    let sql = format!(
+        "SELECT o.id, o.navn, o.type FROM oppskrifter o \
+         WHERE o.type IN ({kat_ph}){diett_where} LIMIT 400"
+    );
+    let refs: Vec<&dyn rusqlite::ToSql> =
+        owned.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+
+    let mut stmt = match conn.prepare(&sql) {
+        Ok(s) => s,
+        Err(_) => return vec![],
+    };
+    let rader = stmt.query_map(refs.as_slice(), |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+    });
+    let rader = match rader {
+        Ok(r) => r,
+        Err(_) => return vec![],
+    };
+
+    let mut ut: Vec<Kandidat> = Vec::new();
+    for row in rader.filter_map(|r| r.ok()) {
+        let (id, navn, type_) = row;
+        let kcal = kcal_per_porsjon(conn, id);
+        // Ingrediensnavn (for gjenbruks-scoring).
+        let mut ings: Vec<String> = Vec::new();
+        if let Ok(mut istmt) = conn.prepare(
+            "SELECT navn FROM ingredienser WHERE oppskrift_id = ? AND navn IS NOT NULL",
+        ) {
+            if let Ok(irows) = istmt.query_map([id], |r| r.get::<_, String>(0)) {
+                for i in irows.filter_map(|r| r.ok()) {
+                    ings.push(i.to_lowercase());
+                }
+            }
+        }
+        ut.push(Kandidat { id, navn, type_, kcal, ingredienser: ings });
+    }
+    ut
+}
+
+// Score (samme formel som matplan-logikk.ts scoreKandidat, jitter via indeks).
+fn score(
+    k: &Kandidat,
+    maal: f64,
+    brukt_type: &std::collections::HashSet<String>,
+    brukte_ing: &std::collections::HashSet<String>,
+    jitter: f64,
+) -> f64 {
+    let mut s = 100.0;
+    match k.kcal {
+        Some(kc) if maal > 0.0 => s -= (kc - maal).abs() / maal * 60.0,
+        _ => s -= 25.0,
+    }
+    if brukt_type.contains(&k.type_) {
+        s -= 30.0;
+    }
+    let delte = k.ingredienser.iter().filter(|i| brukte_ing.contains(*i)).count();
+    s += (delte.min(4) as f64) * 5.0;
+    s + jitter
+}
+
+#[tauri::command]
+fn generer_matplan(
+    app: AppHandle,
+    dagsmaal: i64,
+    personer: i64,
+    dietter: Option<Vec<String>>,
+    laaste: Vec<LaastSlot>,
+) -> Result<UkeSvar, String> {
+    use std::collections::HashSet;
+    let conn = open(&app)?;
+    let dagsmaal = dagsmaal.max(0);
+    let maal = |slot: &str| -> f64 {
+        let andel = match slot {
+            "frokost" => 0.20, "lunsj" => 0.25, "middag" => 0.40, "kveldsmat" => 0.15,
+            _ => 0.0,
+        };
+        dagsmaal as f64 * andel
+    };
+
+    // Forhåndshent kandidater per slot (én DB-runde per slot-type).
+    let kand_frokost = kandidater_for_slot(&conn, "frokost", &dietter);
+    let kand_lunsj = kandidater_for_slot(&conn, "lunsj", &dietter);
+    let kand_middag = kandidater_for_slot(&conn, "middag", &dietter);
+    let kand_kveld = kandidater_for_slot(&conn, "kveldsmat", &dietter);
+
+    let mut brukt_type: HashSet<String> = HashSet::new();
+    let mut brukte_ing: HashSet<String> = HashSet::new();
+    let mut brukt_id: HashSet<i64> = HashSet::new();
+
+    // Velg beste ledige kandidat for en slot; respekter lås.
+    let velg = |kandidater: &[Kandidat],
+                    slot: &str,
+                    dag: usize,
+                    teller: f64,
+                    bt: &mut HashSet<String>,
+                    bi: &mut HashSet<String>,
+                    bid: &mut HashSet<i64>| -> SlotSvar {
+        // Lås? Finn den låste retten blant kandidatene (eller behold som rett uansett).
+        if let Some(l) = laaste.iter().find(|l| l.dag == dag && l.slot == slot) {
+            if let Some(k) = kandidater.iter().find(|k| k.id == l.id) {
+                bt.insert(k.type_.clone());
+                for i in &k.ingredienser { bi.insert(i.clone()); }
+                bid.insert(k.id);
+                return SlotSvar::Rett { id: k.id, navn: k.navn.clone(), kcal: k.kcal, laast: true };
+            }
+        }
+        let m = maal(slot);
+        let mut best: Option<&Kandidat> = None;
+        let mut best_s = f64::NEG_INFINITY;
+        for k in kandidater {
+            if bid.contains(&k.id) { continue; }
+            let jitter = ((k.id as f64 * 2.399_963 + teller) % 1.0) * 10.0;
+            let s = score(k, m, bt, bi, jitter);
+            if s > best_s { best_s = s; best = Some(k); }
+        }
+        match best {
+            Some(k) => {
+                bt.insert(k.type_.clone());
+                for i in &k.ingredienser { bi.insert(i.clone()); }
+                bid.insert(k.id);
+                SlotSvar::Rett { id: k.id, navn: k.navn.clone(), kcal: k.kcal, laast: false }
+            }
+            None => SlotSvar::Tom { grunn: "Ingen passende rett — juster filtre".into() },
+        }
+    };
+
+    let mut dager: Vec<DagSvar> = Vec::with_capacity(7);
+    let mut forrige_middag_navn: Option<String> = None;
+
+    for dag in 0..7usize {
+        let frokost = velg(&kand_frokost, "frokost", dag, dag as f64, &mut brukt_type, &mut brukte_ing, &mut brukt_id);
+
+        // Lunsj: annenhver dag (1,3,5) = rester av forrige middag hvis den finnes.
+        let lunsj = if dag % 2 == 1 {
+            if let Some(navn) = &forrige_middag_navn {
+                SlotSvar::Rester { vis_tekst: format!("Rester: {navn}"), laast: false }
+            } else {
+                velg(&kand_lunsj, "lunsj", dag, dag as f64 + 0.5, &mut brukt_type, &mut brukte_ing, &mut brukt_id)
+            }
+        } else {
+            velg(&kand_lunsj, "lunsj", dag, dag as f64 + 0.5, &mut brukt_type, &mut brukte_ing, &mut brukt_id)
+        };
+
+        let middag = velg(&kand_middag, "middag", dag, dag as f64 + 0.25, &mut brukt_type, &mut brukte_ing, &mut brukt_id);
+        if let SlotSvar::Rett { navn, .. } = &middag {
+            forrige_middag_navn = Some(navn.clone());
+        }
+
+        // Kveldsmat: prøv ekte smørbrød/pålegg-rett, ellers fast enkel tekst.
+        let kveldsmat = {
+            // 60 % av dagene: enkel fast tekst (matcher «1-2 skiver»-vanen); ellers rett.
+            if dag % 5 == 2 && !kand_kveld.is_empty() {
+                velg(&kand_kveld, "kveldsmat", dag, dag as f64 + 0.75, &mut brukt_type, &mut brukte_ing, &mut brukt_id)
+            } else {
+                let idx = dag % KVELDSMAT_ENKEL.len();
+                SlotSvar::Enkel { vis_tekst: KVELDSMAT_ENKEL[idx].to_string(), laast: false }
+            }
+        };
+
+        // kcal/dag: sum av rett-slots med kjent kcal.
+        let mut kcal_sum = 0.0;
+        let mut har = false;
+        for s in [&frokost, &lunsj, &middag, &kveldsmat] {
+            if let SlotSvar::Rett { kcal: Some(k), .. } = s { kcal_sum += k; har = true; }
+        }
+        let kcal_dag = if har { Some((kcal_sum * 10.0).round() / 10.0) } else { None };
+
+        dager.push(DagSvar { frokost, lunsj, middag, kveldsmat, kcal_dag });
+    }
+
+    Ok(UkeSvar {
+        dager,
+        dagsmaal,
+        personer: personer.max(1),
+        generert: chrono_now(),
+    })
+}
+
+// Enkel ISO-tidsstempel uten ekstra avhengighet.
+fn chrono_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    format!("{secs}")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -774,7 +1094,8 @@ pub fn run() {
             hent_oppskrifter_by_ids,
             cook_mode,
             ingrediens_forslag,
-            hva_kan_jeg_lage
+            hva_kan_jeg_lage,
+            generer_matplan
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
