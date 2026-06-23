@@ -1113,6 +1113,34 @@ fn chrono_now() -> String {
     format!("{secs}")
 }
 
+// ─── About-info (kun hjemmebygg) ──────────────────────────────────────────────
+#[cfg(feature = "about")]
+#[derive(serde::Serialize)]
+struct AboutInfo {
+    navn: &'static str,
+    epost: &'static str,
+    versjon: &'static str,
+    beskrivelse: &'static str,
+}
+
+#[cfg(feature = "about")]
+#[tauri::command]
+fn about_info() -> AboutInfo {
+    AboutInfo {
+        navn: "Frank Simonsen",
+        epost: "elpuddro@gmail.com",
+        versjon: env!("CARGO_PKG_VERSION"),
+        beskrivelse: "Kokebok er en offline basert oppskriftssamling for Windows og Linux. \
+            Appen inneholder over 5 900 norske oppskrifter fra matprat.no og godt.no, \
+            med næringsinfo fra Matvaretabellen, smarte funksjoner som ukesmenyplanlegger, \
+            handleliste, kjøleskapsstyring og kostholdsfiltre med mere.",
+    }
+}
+
+#[cfg(not(feature = "about"))]
+#[tauri::command]
+fn about_info() -> Option<()> { None }
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1145,7 +1173,8 @@ pub fn run() {
             cook_mode,
             ingrediens_forslag,
             hva_kan_jeg_lage,
-            generer_matplan
+            generer_matplan,
+            about_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
