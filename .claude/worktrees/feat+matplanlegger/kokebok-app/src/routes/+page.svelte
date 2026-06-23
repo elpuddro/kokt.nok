@@ -13,7 +13,7 @@
   import { matplanLast, matplanLagre, matplanTøm, type Uke, type Dag } from "$lib/matplan";
   import { utlopsStatus } from "$lib/lager-logikk";
   import { finnTider } from "$lib/tid-parsing";
-  import { profilLast, profilSettAktiv, profilOpprett, profilOppdater, profilSlett, tdee, type Brukerprofil, type ProfilStore } from "$lib/helse";
+  import { profilLast, profilSettAktiv, profilOpprett, profilOppdater, profilSlett, tdee, dagsbehov, dekningsProsent, type Brukerprofil, type ProfilStore } from "$lib/helse";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -622,6 +622,8 @@
       treff: n.treff, totalt: n.totalt,
     };
   });
+
+  let aktivtDagsbehov = $derived(aktivProfil ? dagsbehov(aktivProfil) : null);
 
   // Pris: backend gir total for GRUNN-porsjoner. Total skalerer med curP/origP;
   // per-porsjon er stabil (total / origP), som nærings-per-porsjon.
@@ -1348,6 +1350,34 @@
             </div>
           {/if}
         </div>
+        {#if naeringPerPorsjon && aktivtDagsbehov}
+          {@const n = naeringPerPorsjon}
+          {@const db = aktivtDagsbehov}
+          <div class="dagsbehov-wrap">
+            <div class="dagsbehov-title">📈 Andel av dagsbehov – per porsjon</div>
+            <div class="dagsbehov-grid">
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.e, db.kcal)}%</span>
+                <span class="dagsbehov-lbl">🔥 Energi</span>
+              </div>
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.p, db.protein)}%</span>
+                <span class="dagsbehov-lbl">🥩 Protein</span>
+              </div>
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.f, db.fett)}%</span>
+                <span class="dagsbehov-lbl">🫙 Fett</span>
+              </div>
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.k, db.karbo)}%</span>
+                <span class="dagsbehov-lbl">🌾 Karbo</span>
+              </div>
+            </div>
+            <div class="dagsbehov-profil">
+              Basert på profil: {aktivProfil!.navn} · {db.kcal} kcal/dag
+            </div>
+          </div>
+        {/if}
         {#if prisVist}
           {@const pr = prisVist}
           <div class="pris-wrap">
@@ -1858,6 +1888,25 @@
   .naering-lbl { font-size: 0.72rem; color: var(--text-muted); margin-top: 3px; }
   .naering-disclaimer { margin-top: 10px; font-size: 0.72rem; color: var(--text-dim); text-align: center; font-style: italic; }
   .naering-unavailable { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 8px 0; font-style: italic; }
+
+  .dagsbehov-wrap {
+    margin-top: 14px; padding: 14px 16px; background: var(--bg-warm);
+    border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .dagsbehov-title {
+    font-family: var(--font-head); font-size: 0.95rem; font-weight: 700; color: var(--text);
+    margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); display: inline-block;
+  }
+  .dagsbehov-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .dagsbehov-kort {
+    background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-sm);
+    padding: 10px 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .dagsbehov-pst {
+    font-family: var(--font-head); font-size: 1.2rem; font-weight: 700; color: var(--accent-dark); line-height: 1;
+  }
+  .dagsbehov-lbl { font-size: 0.7rem; color: var(--text-muted); }
+  .dagsbehov-profil { margin-top: 10px; font-size: 0.72rem; color: var(--text-dim); text-align: center; font-style: italic; }
 
   .pris-wrap {
     margin-top: 1rem;
