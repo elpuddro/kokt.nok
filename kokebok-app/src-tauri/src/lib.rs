@@ -1141,6 +1141,68 @@ fn about_info() -> AboutInfo {
 #[tauri::command]
 fn about_info() -> Option<()> { None }
 
+// ─── Forside: tilfeldige oppskrifter etter type-kategori ─────────────────────
+#[derive(serde::Serialize)]
+struct ForsideOppskrift {
+    id: i64,
+    navn: String,
+    tid: Option<String>,
+    bilde: Option<String>,
+}
+
+#[tauri::command]
+fn forside_oppskrifter(
+    app: AppHandle,
+    typer: Vec<String>,
+    #[allow(non_snake_case)] nattFilter: bool,
+) -> Vec<ForsideOppskrift> {
+    let conn = match open(&app) {
+        Ok(c) => c,
+        Err(_) => return vec![],
+    };
+
+    if typer.is_empty() {
+        return vec![];
+    }
+
+    let placeholders = typer.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+
+    let sql = if nattFilter {
+        format!(
+            "SELECT id, navn, tid, bilde FROM oppskrifter \
+             WHERE type IN ({placeholders}) \
+             AND id NOT IN ( \
+                 SELECT DISTINCT oppskrift_id FROM trinn \
+                 WHERE LOWER(tekst) LIKE '%ovn%' \
+                    OR LOWER(tekst) LIKE '%stekepanne%' \
+             ) \
+             ORDER BY RANDOM() LIMIT 20"
+        )
+    } else {
+        format!(
+            "SELECT id, navn, tid, bilde FROM oppskrifter \
+             WHERE type IN ({placeholders}) \
+             ORDER BY RANDOM() LIMIT 20"
+        )
+    };
+
+    let params: Vec<&dyn rusqlite::ToSql> = typer.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
+
+    conn.prepare(&sql)
+        .and_then(|mut stmt| {
+            stmt.query_map(params.as_slice(), |row| {
+                Ok(ForsideOppskrift {
+                    id: row.get(0)?,
+                    navn: row.get(1)?,
+                    tid: row.get(2)?,
+                    bilde: row.get(3)?,
+                })
+            })
+            .and_then(|rows| rows.collect())
+        })
+        .unwrap_or_default()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1174,7 +1236,8 @@ pub fn run() {
             ingrediens_forslag,
             hva_kan_jeg_lage,
             generer_matplan,
-            about_info
+            about_info,
+            forside_oppskrifter
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
