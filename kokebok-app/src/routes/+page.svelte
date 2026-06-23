@@ -65,6 +65,26 @@
   let profilFelt = $state({ navn: "", kjønn: "mann" as "mann"|"kvinne", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat" as Brukerprofil["aktivitet"], mål: "vedlikehold" as Brukerprofil["mål"] });
   let aboutInfo = $state<{ navn: string; epost: string; versjon: string; beskrivelse: string } | null>(null);
   let innstFane = $state<"tema" | "diett" | "profil">("tema");
+
+  // ── Tidsbasert forside ────────────────────────────────────────────────────────
+  interface ForsideOppskrift { id: number; navn: string; tid: string | null; bilde: string | null }
+
+  const TIDSSONER: Array<{ fra: number; til: number; typer: string[]; tittel: string }> = [
+    { fra: 6,  til: 10, typer: ["Frokost", "Sandwich/smørbrød", "Snacks"],         tittel: "God morgen 🌅" },
+    { fra: 10, til: 14, typer: ["Lunsj", "Tapas/småretter", "Sandwich/smørbrød"],  tittel: "Tid for lunsj 🥗" },
+    { fra: 14, til: 18, typer: ["Middag", "Supper", "Gryter"],                      tittel: "Middagstid 🍽️" },
+    { fra: 18, til: 22, typer: ["Middag", "Tapas/småretter", "Forretter"],          tittel: "God kveld 🌆" },
+    { fra: 22, til: 6,  typer: ["Middag", "Supper", "Snacks"],                      tittel: "Sent på kvelden 🌙" },
+  ];
+
+  let forsideOppskrifter = $state<ForsideOppskrift[]>([]);
+  let forsideTittel = $state("");
+
+  $effect(() => {
+    if (currentKategori === "alle" && forsideOppskrifter.length === 0) {
+      lastForside();
+    }
+  });
   let cookModeAktiv = $state(false);
   type Timer = { id: number; navn: string; igjen: number; total: number; ferdig: boolean; pauset: boolean };
   let timere = $state<Timer[]>([]);
@@ -256,6 +276,24 @@
     if (!confirm("Slett denne profilen?")) return;
     profilStore = await profilSlett(id);
     if (aktivProfil) planDagsmaal = tdee(aktivProfil);
+  }
+
+  function nåværendeTidssone() {
+    const t = new Date().getHours();
+    return TIDSSONER.find(s =>
+      s.til > s.fra ? t >= s.fra && t < s.til : t >= s.fra || t < s.til
+    )!;
+  }
+
+  async function lastForside() {
+    const sone = nåværendeTidssone();
+    forsideTittel = sone.tittel;
+    const t = new Date().getHours();
+    const nattFilter = (t >= 22 || t < 6) && aboutInfo === null;
+    forsideOppskrifter = await invoke<ForsideOppskrift[]>("forside_oppskrifter", {
+      typer: sone.typer,
+      nattFilter,
+    });
   }
 
   type LaastSlot = { dag: number; slot: string; id: number };
@@ -667,6 +705,7 @@
       // fengselsbygg — about ikke tilgjengelig
       aboutInfo = null;
     }
+    await lastForside();
   });
 
   onDestroy(() => {
@@ -1138,6 +1177,33 @@
           <button class="plan-lagre" onclick={lagreUka}>💾 Lagre uka</button>
         </div>
       {/if}
+    </div>
+  {/if}
+
+  {#if currentKategori === "alle" && !sok && forsideOppskrifter.length > 0}
+    <div class="forside-wrap">
+      <div class="forside-header">
+        <h2 class="forside-tittel">{forsideTittel}</h2>
+        <p class="forside-undertekst">Forslag til deg akkurat nå</p>
+      </div>
+      <div class="forside-grid">
+        {#each forsideOppskrifter as o (o.id)}
+          <article class="recipe-card" onclick={() => åpneOppskrift(o.id)}>
+            <div class="card-img-wrap">
+              {#if imgSrc(o.id)}
+                <img src={imgSrc(o.id)} alt={o.navn} loading="lazy" />
+              {:else}
+                <div class="card-img-placeholder">🍽️</div>
+              {/if}
+              {#if o.tid}<div class="card-badge-time">⏱ {o.tid}</div>{/if}
+            </div>
+            <div class="card-body">
+              <div class="card-name">{o.navn}</div>
+            </div>
+          </article>
+        {/each}
+      </div>
+      <hr class="forside-skille" />
     </div>
   {/if}
 
@@ -2041,4 +2107,20 @@
   .about-tittel { font-weight: 600; margin-bottom: 8px; color: var(--text); }
   .about-tekst { font-size: 0.85rem; line-height: 1.5; margin-bottom: 8px; }
   .about-kontakt { font-size: 0.8rem; }
+
+  /* ── Tidsbasert forside ─────────────────────────────────── */
+  .forside-wrap { margin-bottom: 24px; }
+  .forside-header { margin-bottom: 16px; }
+  .forside-tittel { font-size: 1.3rem; font-weight: 700; margin: 0 0 4px; }
+  .forside-undertekst { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
+  .forside-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .forside-skille {
+    border: none; border-top: 1px solid var(--border);
+    margin: 0 0 24px;
+  }
 </style>
