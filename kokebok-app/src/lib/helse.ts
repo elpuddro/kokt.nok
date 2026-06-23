@@ -64,12 +64,10 @@ export function dekningsProsent(næring: number, behov: number): number {
   return Math.round((næring / behov) * 100);
 }
 
-const TOM_STORE: ProfilStore = { profiler: [], aktivId: null };
-
 export async function profilLast(): Promise<ProfilStore> {
   const store = await load("profiler.json");
   const data = await store.get<ProfilStore>("profiler");
-  return data ?? TOM_STORE;
+  return data ?? { profiler: [], aktivId: null };
 }
 
 async function _lagre(ps: ProfilStore): Promise<void> {

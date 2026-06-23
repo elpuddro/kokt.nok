@@ -13,6 +13,7 @@
   import { matplanLast, matplanLagre, matplanTøm, type Uke, type Dag } from "$lib/matplan";
   import { utlopsStatus } from "$lib/lager-logikk";
   import { finnTider } from "$lib/tid-parsing";
+  import { profilLast, profilSettAktiv, profilOpprett, profilOppdater, profilSlett, tdee, dagsbehov, dekningsProsent, type Brukerprofil, type ProfilStore } from "$lib/helse";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -57,12 +58,23 @@
   let planDagsmaal = $state(2000);
   let planPersoner = $state(2);
   let planLaster = $state(false);
+  let profilStore = $state<ProfilStore>({ profiler: [], aktivId: null });
+  let profilDropdownÅpen = $state(false);
+  let profilSkjemaÅpent = $state(false);
+  let profilRedigerer = $state<Brukerprofil | null>(null);
+  let profilFelt = $state({ navn: "", kjønn: "mann" as "mann"|"kvinne", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat" as Brukerprofil["aktivitet"], mål: "vedlikehold" as Brukerprofil["mål"] });
+  let aboutInfo = $state<{ navn: string; epost: string; versjon: string; beskrivelse: string } | null>(null);
+  let innstFane = $state<"tema" | "diett" | "profil">("tema");
   let cookModeAktiv = $state(false);
   type Timer = { id: number; navn: string; igjen: number; total: number; ferdig: boolean; pauset: boolean };
   let timere = $state<Timer[]>([]);
   let nesteTimerId = 1;
   let timerTikk: any = null;
   let lydCtx: AudioContext | null = null;
+
+  let aktivProfil = $derived(
+    profilStore.profiler.find((p) => p.id === profilStore.aktivId) ?? null
+  );
 
   let pages = $derived(Math.ceil(total / perSide));
   let totalAlle = $derived(kategorier.reduce((s, k) => s + k.antall, 0));
@@ -209,6 +221,41 @@
     side = 1;
     sok = "";
     oppskrifter = [];
+  }
+
+  async function velgProfilAktiv(id: string) {
+    profilStore = await profilSettAktiv(id);
+    profilDropdownÅpen = false;
+    if (aktivProfil) planDagsmaal = tdee(aktivProfil);
+  }
+
+  function startNyProfil() {
+    profilRedigerer = null;
+    profilFelt = { navn: "", kjønn: "mann", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat", mål: "vedlikehold" };
+    profilSkjemaÅpent = true;
+  }
+
+  function startRedigerProfil(p: Brukerprofil) {
+    profilRedigerer = p;
+    profilFelt = { navn: p.navn, kjønn: p.kjønn, alder: p.alder, høyde: p.høyde, vekt: p.vekt, aktivitet: p.aktivitet, mål: p.mål };
+    profilSkjemaÅpent = true;
+  }
+
+  async function lagreProfil() {
+    if (!profilFelt.navn.trim()) return;
+    if (profilRedigerer) {
+      profilStore = await profilOppdater({ ...profilRedigerer, ...profilFelt });
+    } else {
+      profilStore = await profilOpprett(profilFelt);
+    }
+    profilSkjemaÅpent = false;
+    if (aktivProfil) planDagsmaal = tdee(aktivProfil);
+  }
+
+  async function slettProfil(id: string) {
+    if (!confirm("Slett denne profilen?")) return;
+    profilStore = await profilSlett(id);
+    if (aktivProfil) planDagsmaal = tdee(aktivProfil);
   }
 
   type LaastSlot = { dag: number; slot: string; id: number };
@@ -576,6 +623,8 @@
     };
   });
 
+  let aktivtDagsbehov = $derived(aktivProfil ? dagsbehov(aktivProfil) : null);
+
   // Pris: backend gir total for GRUNN-porsjoner. Total skalerer med curP/origP;
   // per-porsjon er stabil (total / origP), som nærings-per-porsjon.
   let prisVist = $derived.by(() => {
@@ -607,6 +656,17 @@
     plan = await matplanLast();
     kategorier = await invoke("get_kategorier", { dietter: aktiveDietter });
     await fetchGrid();
+    profilStore = await profilLast();
+    if (profilStore.aktivId) {
+      const ap = profilStore.profiler.find(p => p.id === profilStore.aktivId);
+      if (ap) planDagsmaal = tdee(ap);
+    }
+    try {
+      aboutInfo = await invoke("about_info");
+    } catch {
+      // fengselsbygg — about ikke tilgjengelig
+      aboutInfo = null;
+    }
   });
 
   onDestroy(() => {
@@ -621,6 +681,40 @@
   <div class="sidebar-logo">
     <span class="logo-icon">🍳</span>
     <span class="logo-text">Kokebok</span>
+  </div>
+
+  <div class="profil-velger">
+    <button
+      class="profil-velger-knapp"
+      onclick={() => (profilDropdownÅpen = !profilDropdownÅpen)}
+    >
+      <span class="profil-initialer">
+        {aktivProfil ? aktivProfil.navn.slice(0, 2).toUpperCase() : "?"}
+      </span>
+      <span class="profil-navn-tekst">
+        {aktivProfil ? aktivProfil.navn : "Velg profil"}
+      </span>
+      <span class="profil-chevron">{profilDropdownÅpen ? "▲" : "▼"}</span>
+    </button>
+    {#if profilDropdownÅpen}
+      <div class="profil-dropdown">
+        {#each profilStore.profiler as p (p.id)}
+          <button
+            class="profil-dd-rad"
+            class:aktiv={p.id === profilStore.aktivId}
+            onclick={() => velgProfilAktiv(p.id)}
+          >
+            {p.navn} {p.id === profilStore.aktivId ? "✓" : ""}
+          </button>
+        {/each}
+        {#if profilStore.profiler.length === 0}
+          <span class="profil-dd-tom">Ingen profiler</span>
+        {/if}
+        <button class="profil-dd-admin" onclick={() => { profilDropdownÅpen = false; velgInnstillinger(); innstFane = "profil"; }}>
+          Administrer profiler →
+        </button>
+      </div>
+    {/if}
   </div>
 
   {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
@@ -792,6 +886,12 @@
 
   {#if currentKategori === "__innst__"}
     <div id="innst-wrap">
+      <div class="innst-faner">
+        <button class:aktiv-fane={innstFane === "tema"} onclick={() => (innstFane = "tema")}>🎨 Temaer</button>
+        <button class:aktiv-fane={innstFane === "diett"} onclick={() => (innstFane = "diett")}>🍽️ Kosthold</button>
+        <button class:aktiv-fane={innstFane === "profil"} onclick={() => (innstFane = "profil")}>👤 Helseprofil</button>
+      </div>
+      {#if innstFane === "tema"}
       <details class="innst-seksjon">
         <summary><h2>🎨 Tema</h2></summary>
         <p class="innst-hint">
@@ -813,6 +913,8 @@
           </label>
         {/each}
       </details>
+      {/if}
+      {#if innstFane === "diett"}
       <details class="innst-seksjon">
         <summary>
           <h2>🍽️ Kosthold og allergier <span class="beta-merke">BETA</span></h2>
@@ -833,6 +935,77 @@
           </label>
         {/each}
       </details>
+      {/if}
+      {#if innstFane === "profil"}
+      <div class="profil-liste">
+        <h2>Helseprofiler</h2>
+        {#each profilStore.profiler as p (p.id)}
+          <div class="profil-kort" class:aktiv-profil={p.id === profilStore.aktivId}>
+            <div class="profil-kort-info">
+              <strong>{p.navn}</strong>
+              <span>{tdee(p)} kcal/dag</span>
+              {#if p.id === profilStore.aktivId}<span class="aktiv-merke">● Aktiv</span>{/if}
+            </div>
+            <div class="profil-kort-knapper">
+              {#if p.id !== profilStore.aktivId}
+                <button onclick={() => velgProfilAktiv(p.id)}>Velg</button>
+              {/if}
+              <button onclick={() => startRedigerProfil(p)}>Rediger</button>
+              <button onclick={() => slettProfil(p.id)}>Slett</button>
+            </div>
+          </div>
+        {/each}
+        {#if profilStore.profiler.length === 0}
+          <p class="lager-tom">Ingen profiler opprettet ennå.</p>
+        {/if}
+        {#if !profilSkjemaÅpent}
+          <button class="profil-ny-knapp" onclick={startNyProfil}>+ Ny profil</button>
+        {:else}
+          <div class="profil-skjema">
+            <h3>{profilRedigerer ? "Rediger profil" : "Ny profil"}</h3>
+            <label>Navn <input type="text" bind:value={profilFelt.navn} /></label>
+            <label>Kjønn
+              <select bind:value={profilFelt.kjønn}>
+                <option value="mann">Mann</option>
+                <option value="kvinne">Kvinne</option>
+              </select>
+            </label>
+            <label>Alder (år) <input type="number" min="10" max="120" bind:value={profilFelt.alder} /></label>
+            <label>Høyde (cm) <input type="number" min="100" max="250" bind:value={profilFelt.høyde} /></label>
+            <label>Vekt (kg) <input type="number" min="30" max="300" step="0.5" bind:value={profilFelt.vekt} /></label>
+            <label>Aktivitetsnivå
+              <select bind:value={profilFelt.aktivitet}>
+                <option value="stillesittende">Stillesittende (lite/ingen trening)</option>
+                <option value="lett">Lett aktiv (1–3 dager/uke)</option>
+                <option value="moderat">Moderat aktiv (3–5 dager/uke)</option>
+                <option value="aktiv">Aktiv (6–7 dager/uke)</option>
+                <option value="veldig_aktiv">Veldig aktiv (hard trening + fysisk jobb)</option>
+              </select>
+            </label>
+            <label>Mål
+              <select bind:value={profilFelt.mål}>
+                <option value="nedgang">Vektnedgang (−500 kcal)</option>
+                <option value="vedlikehold">Vedlikehold</option>
+                <option value="oppgang">Vektøkning (+500 kcal)</option>
+              </select>
+            </label>
+            <div class="profil-skjema-knapper">
+              <button onclick={lagreProfil}>Lagre</button>
+              <button onclick={() => (profilSkjemaÅpent = false)}>Avbryt</button>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      {#if aboutInfo}
+        <div class="about-seksjon">
+          <hr />
+          <div class="about-tittel">Om appen · v{aboutInfo.versjon}</div>
+          <p class="about-tekst">{aboutInfo.beskrivelse}</p>
+          <div class="about-kontakt">{aboutInfo.navn} · {aboutInfo.epost}</div>
+        </div>
+      {/if}
+      {/if}
     </div>
   {/if}
 
@@ -1177,6 +1350,34 @@
             </div>
           {/if}
         </div>
+        {#if naeringPerPorsjon && aktivtDagsbehov}
+          {@const n = naeringPerPorsjon}
+          {@const db = aktivtDagsbehov}
+          <div class="dagsbehov-wrap">
+            <div class="dagsbehov-title">📈 Andel av dagsbehov – per porsjon</div>
+            <div class="dagsbehov-grid">
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.e, db.kcal)}%</span>
+                <span class="dagsbehov-lbl">🔥 Energi</span>
+              </div>
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.p, db.protein)}%</span>
+                <span class="dagsbehov-lbl">🥩 Protein</span>
+              </div>
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.f, db.fett)}%</span>
+                <span class="dagsbehov-lbl">🫙 Fett</span>
+              </div>
+              <div class="dagsbehov-kort">
+                <span class="dagsbehov-pst">{dekningsProsent(n.k, db.karbo)}%</span>
+                <span class="dagsbehov-lbl">🌾 Karbo</span>
+              </div>
+            </div>
+            <div class="dagsbehov-profil">
+              Basert på profil: {aktivProfil!.navn} · {db.kcal} kcal/dag
+            </div>
+          </div>
+        {/if}
         {#if prisVist}
           {@const pr = prisVist}
           <div class="pris-wrap">
@@ -1688,6 +1889,25 @@
   .naering-disclaimer { margin-top: 10px; font-size: 0.72rem; color: var(--text-dim); text-align: center; font-style: italic; }
   .naering-unavailable { text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 8px 0; font-style: italic; }
 
+  .dagsbehov-wrap {
+    margin-top: 14px; padding: 14px 16px; background: var(--bg-warm);
+    border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .dagsbehov-title {
+    font-family: var(--font-head); font-size: 0.95rem; font-weight: 700; color: var(--text);
+    margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid var(--accent); display: inline-block;
+  }
+  .dagsbehov-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .dagsbehov-kort {
+    background: var(--surface); border: 1px solid var(--border-light); border-radius: var(--radius-sm);
+    padding: 10px 6px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .dagsbehov-pst {
+    font-family: var(--font-head); font-size: 1.2rem; font-weight: 700; color: var(--accent-dark); line-height: 1;
+  }
+  .dagsbehov-lbl { font-size: 0.7rem; color: var(--text-muted); }
+  .dagsbehov-profil { margin-top: 10px; font-size: 0.72rem; color: var(--text-dim); text-align: center; font-style: italic; }
+
   .pris-wrap {
     margin-top: 1rem;
     padding: 1rem 1.25rem;
@@ -1712,4 +1932,113 @@
     border-radius: 50%; animation: spin 0.7s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg) } }
+
+  /* ── Profilvelger ─────────────────────────────────────────── */
+  .profil-velger {
+    position: relative;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .profil-velger-knapp {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%; background: none; border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px; cursor: pointer;
+    color: var(--text); font-size: 0.85rem;
+  }
+  .profil-velger-knapp:hover { background: var(--card-hover); }
+  .profil-initialer {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+  }
+  .profil-navn-tekst { flex: 1; text-align: left; }
+  .profil-chevron { font-size: 0.65rem; color: var(--text-muted); }
+  .profil-dropdown {
+    position: absolute; top: 100%; left: 12px; right: 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,.15);
+    z-index: 100; display: flex; flex-direction: column;
+  }
+  .profil-dd-rad {
+    padding: 8px 12px; text-align: left; background: none;
+    border: none; cursor: pointer; color: var(--text); font-size: 0.85rem;
+  }
+  .profil-dd-rad:hover, .profil-dd-rad.aktiv { background: var(--card-hover); }
+  .profil-dd-tom { padding: 8px 12px; color: var(--text-muted); font-size: 0.8rem; }
+  .profil-dd-admin {
+    padding: 8px 12px; text-align: left; background: none;
+    border-top: 1px solid var(--border); border-left: none;
+    border-right: none; border-bottom: none;
+    cursor: pointer; color: var(--accent); font-size: 0.8rem;
+  }
+  .profil-dd-admin:hover { text-decoration: underline; }
+
+  /* ── Innstillinger-faner ──────────────────────────────────── */
+  .innst-faner {
+    display: flex; gap: 4px; margin-bottom: 20px;
+    border-bottom: 1px solid var(--border); padding-bottom: 8px;
+  }
+  .innst-faner button {
+    padding: 6px 14px; border: 1px solid var(--border);
+    border-radius: 6px 6px 0 0; background: none;
+    cursor: pointer; color: var(--text); font-size: 0.85rem;
+  }
+  .innst-faner button.aktiv-fane {
+    background: var(--accent); color: #fff; border-color: var(--accent);
+  }
+
+  /* ── Helseprofil-liste og skjema ─────────────────────────── */
+  .profil-liste { display: flex; flex-direction: column; gap: 12px; }
+  .profil-kort {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px; border: 1px solid var(--border);
+    border-radius: 8px; background: var(--card);
+  }
+  .profil-kort.aktiv-profil { border-color: var(--accent); }
+  .profil-kort-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
+  .aktiv-merke { color: var(--accent); font-size: 0.75rem; }
+  .profil-kort-knapper { display: flex; gap: 6px; }
+  .profil-kort-knapper button {
+    padding: 4px 10px; border: 1px solid var(--border);
+    border-radius: 4px; background: none; cursor: pointer;
+    color: var(--text); font-size: 0.8rem;
+  }
+  .profil-kort-knapper button:hover { background: var(--card-hover); }
+  .profil-ny-knapp {
+    align-self: flex-start; padding: 8px 16px;
+    background: var(--accent); color: #fff; border: none;
+    border-radius: 6px; cursor: pointer; font-size: 0.9rem;
+  }
+  .profil-skjema {
+    display: flex; flex-direction: column; gap: 10px;
+    padding: 16px; border: 1px solid var(--border); border-radius: 8px;
+  }
+  .profil-skjema label {
+    display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem;
+  }
+  .profil-skjema input, .profil-skjema select {
+    padding: 6px 10px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--bg); color: var(--text);
+    font-size: 0.9rem;
+  }
+  .profil-skjema-knapper { display: flex; gap: 8px; margin-top: 4px; }
+  .profil-skjema-knapper button {
+    padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.85rem;
+  }
+  .profil-skjema-knapper button:first-child {
+    background: var(--accent); color: #fff; border: none;
+  }
+  .profil-skjema-knapper button:last-child {
+    background: none; border: 1px solid var(--border); color: var(--text);
+  }
+
+  /* ── About-seksjon ───────────────────────────────────────── */
+  .about-seksjon {
+    margin-top: 24px; padding-top: 16px;
+    border-top: 1px solid var(--border); color: var(--text-muted);
+  }
+  .about-tittel { font-weight: 600; margin-bottom: 8px; color: var(--text); }
+  .about-tekst { font-size: 0.85rem; line-height: 1.5; margin-bottom: 8px; }
+  .about-kontakt { font-size: 0.8rem; }
 </style>
