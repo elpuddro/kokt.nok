@@ -1896,7 +1896,7 @@
     border-radius: 6px; padding: 6px 10px; cursor: pointer;
     color: var(--text); font-size: 0.85rem;
   }
-  .profil-velger-knapp:hover { background: var(--hover-bg); }
+  .profil-velger-knapp:hover { background: var(--card-hover); }
   .profil-initialer {
     width: 24px; height: 24px; border-radius: 50%;
     background: var(--accent); color: #fff;
@@ -1915,7 +1915,7 @@
     padding: 8px 12px; text-align: left; background: none;
     border: none; cursor: pointer; color: var(--text); font-size: 0.85rem;
   }
-  .profil-dd-rad:hover, .profil-dd-rad.aktiv { background: var(--hover-bg); }
+  .profil-dd-rad:hover, .profil-dd-rad.aktiv { background: var(--card-hover); }
   .profil-dd-tom { padding: 8px 12px; color: var(--text-muted); font-size: 0.8rem; }
   .profil-dd-admin {
     padding: 8px 12px; text-align: left; background: none;
@@ -1944,7 +1944,7 @@
   .profil-kort {
     display: flex; justify-content: space-between; align-items: center;
     padding: 12px 16px; border: 1px solid var(--border);
-    border-radius: 8px; background: var(--card-bg);
+    border-radius: 8px; background: var(--card);
   }
   .profil-kort.aktiv-profil { border-color: var(--accent); }
   .profil-kort-info { display: flex; flex-direction: column; gap: 2px; font-size: 0.9rem; }
@@ -1955,7 +1955,7 @@
     border-radius: 4px; background: none; cursor: pointer;
     color: var(--text); font-size: 0.8rem;
   }
-  .profil-kort-knapper button:hover { background: var(--hover-bg); }
+  .profil-kort-knapper button:hover { background: var(--card-hover); }
   .profil-ny-knapp {
     align-self: flex-start; padding: 8px 16px;
     background: var(--accent); color: #fff; border: none;
