@@ -1225,6 +1225,131 @@ fn about_info() -> AboutInfo {
 #[tauri::command]
 fn about_info() -> Option<()> { None }
 
+// ─── Høytidsdeteksjon ────────────────────────────────────────────────────────
+
+// Beregn 1. påskedag for ett år via Gauss/Computus-algoritmen.
+// Returnerer (måned, dag): (3, X) for mars, (4, X) for april.
+fn paaskedag(aar: i32) -> (u32, u32) {
+    let a = (aar % 19) as u32;
+    let b = (aar / 100) as u32;
+    let c = (aar % 100) as u32;
+    let d = b / 4;
+    let e = b % 4;
+    let f = (b + 8) / 25;
+    let g = (b - f + 1) / 3;
+    let h = (19 * a + b - d - g + 15) % 30;
+    let i = c / 4;
+    let k = c % 4;
+    let l = (32 + 2 * e + 2 * i - h - k) % 7;
+    let m = (a + 11 * h + 22 * l) / 451;
+    let maaned = (h + l - 7 * m + 114) / 31;
+    let dag = ((h + l - 7 * m + 114) % 31) + 1;
+    (maaned, dag)
+}
+
+// Gitt dato (1-indeksert måned, dag, ISO ukedag 1=man..7=søn, år),
+// returner gjeldende høytidsnøkkel eller None.
+fn hoytid_aktiv_dato(maaned: u32, dag: u32, _ukedag: u32, aar: i32) -> Option<String> {
+    // Valentinsdag: feb 7–14
+    if maaned == 2 && dag >= 7 && dag <= 14 {
+        return Some("valentins".into());
+    }
+
+    // Påske: palmesøndag (påske−7 dager) → 2. påskedag (påske+1 dag)
+    let (p_mnd, p_dag) = paaskedag(aar);
+    // Konverter til dagnummer i år for enkel ± beregning
+    let dager_i_mnd = |m: u32, y: i32| -> u32 {
+        match m {
+            1|3|5|7|8|10|12 => 31,
+            4|6|9|11 => 30,
+            2 => if y % 4 == 0 && (y % 100 != 0 || y % 400 == 0) { 29 } else { 28 },
+            _ => 30,
+        }
+    };
+    let til_dagsnr = |m: u32, d: u32| -> i32 {
+        let mut n: i32 = d as i32;
+        for mm in 1..m { n += dager_i_mnd(mm, aar) as i32; }
+        n
+    };
+    let paske_nr = til_dagsnr(p_mnd, p_dag);
+    let dato_nr  = til_dagsnr(maaned, dag);
+    if dato_nr >= paske_nr - 7 && dato_nr <= paske_nr + 1 {
+        return Some("paske".into());
+    }
+
+    // 17. mai: mai 10–18
+    if maaned == 5 && dag >= 10 && dag <= 18 {
+        return Some("mai17".into());
+    }
+
+    // Sankthans: jun 20–24
+    if maaned == 6 && dag >= 20 && dag <= 24 {
+        return Some("sankthans".into());
+    }
+
+    // Fårikålens dag: siste torsdag i september ± 3 dager
+    // Siste torsdag i sept: finn dag 30, gå bakover til torsdag (ukedag 4)
+    // Vi beregner siste torsdag ved å se hvilken dag 30. sept er.
+    // Bruk Tomohiko Sakamoto-algoritme for ukedag.
+    let sept_30_ukedag = {
+        let y = aar; let m = 9u32; let d = 30u32;
+        let t: [i32; 12] = [0,3,2,5,0,3,5,1,4,6,2,4];
+        let yr = if m < 3 { y - 1 } else { y };
+        let wd = (yr + yr/4 - yr/100 + yr/400 + t[(m-1) as usize] + d as i32) % 7;
+        // 0=søn,1=man,...,6=lør → ISO: man=1..søn=7
+        let iso = if wd == 0 { 7u32 } else { wd as u32 };
+        iso
+    };
+    // Torsdag=4. Siste torsdag i sept: 30 - (sept_30_ukedag - 4 + 7) % 7
+    let diff = (sept_30_ukedag + 7 - 4) % 7;
+    let siste_tors = 30u32 - diff;
+    let farikaal_nr = til_dagsnr(9, siste_tors);
+    if maaned == 9 && (dato_nr - farikaal_nr).abs() <= 3 {
+        return Some("farikaal".into());
+    }
+
+    // Halloween: okt 24–31
+    if maaned == 10 && dag >= 24 {
+        return Some("halloween".into());
+    }
+
+    // Jul: des 1 – jan 6
+    if maaned == 12 && dag >= 1 {
+        return Some("jul".into());
+    }
+    if maaned == 1 && dag <= 6 {
+        return Some("jul".into());
+    }
+
+    None
+}
+
+#[tauri::command]
+fn hoytid_aktiv() -> Option<String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Unix-sekunder → dato (ingen chrono-crate)
+    // Naiv gregorisk: sekunder siden 1970-01-01
+    let dager_siden_epoke = (secs / 86400) as i64;
+    // Civil-from-days algoritme (Howard Hinnant)
+    let z = dager_siden_epoke + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365*yoe + yoe/4 - yoe/100);
+    let mp = (5*doy + 2)/153;
+    let d = doy - (153*mp+2)/5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    // ISO ukedag: 1970-01-01=torsdag=4
+    let ukedag = ((dager_siden_epoke + 3) % 7 + 1) as u32; // 1=man..7=søn
+    hoytid_aktiv_dato(m as u32, d as u32, ukedag, y as i32)
+}
+
 // ─── Forside: tilfeldige oppskrifter etter type-kategori ─────────────────────
 #[derive(serde::Serialize)]
 struct ForsideOppskrift {
@@ -1239,11 +1364,32 @@ fn forside_oppskrifter(
     app: AppHandle,
     typer: Vec<String>,
     #[allow(non_snake_case)] nattFilter: bool,
+    hoytid: Option<String>,
 ) -> Vec<ForsideOppskrift> {
     let conn = match open(&app) {
         Ok(c) => c,
         Err(_) => return vec![],
     };
+
+    // Høytidsmodus: ignorer typer/nattFilter, filtrer på høytid-kolonne
+    if let Some(ref h) = hoytid {
+        let sql = "SELECT id, navn, tid, bilde FROM oppskrifter \
+                   WHERE INSTR(',' || COALESCE(hoytid,'') || ',', ',' || ? || ',') > 0 \
+                   ORDER BY RANDOM() LIMIT 20";
+        return conn.prepare(sql)
+            .and_then(|mut stmt| {
+                stmt.query_map([h.as_str()], |row| {
+                    Ok(ForsideOppskrift {
+                        id: row.get(0)?,
+                        navn: row.get(1)?,
+                        tid: row.get(2)?,
+                        bilde: row.get(3)?,
+                    })
+                })
+                .and_then(|rows| rows.collect())
+            })
+            .unwrap_or_default();
+    }
 
     if typer.is_empty() {
         return vec![];
@@ -1322,6 +1468,7 @@ pub fn run() {
             generer_matplan,
             about_info,
             forside_oppskrifter,
+            hoytid_aktiv,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -1329,7 +1476,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::tid_til_min;
+    use super::{tid_til_min, paaskedag, hoytid_aktiv_dato};
 
     #[test]
     fn test_tid_til_min_min() {
@@ -1351,5 +1498,53 @@ mod tests {
     #[test]
     fn test_tid_til_min_2_timer() {
         assert_eq!(tid_til_min("2 timer 30 min"), Some(150));
+    }
+
+    #[test]
+    fn test_paaskedag_2024() {
+        // Påske 2024: 31. mars
+        assert_eq!(paaskedag(2024), (3, 31));
+    }
+
+    #[test]
+    fn test_paaskedag_2025() {
+        // Påske 2025: 20. april
+        assert_eq!(paaskedag(2025), (4, 20));
+    }
+
+    #[test]
+    fn test_hoytid_jul_desember() {
+        // 15. des, tirsdag (ukedag 2), 2024
+        assert_eq!(hoytid_aktiv_dato(12, 15, 2, 2024).as_deref(), Some("jul"));
+    }
+
+    #[test]
+    fn test_hoytid_jul_januar() {
+        // 3. jan, torsdag (ukedag 4), 2025
+        assert_eq!(hoytid_aktiv_dato(1, 3, 4, 2025).as_deref(), Some("jul"));
+    }
+
+    #[test]
+    fn test_hoytid_halloween() {
+        // 28. okt, mandag (ukedag 1), 2024
+        assert_eq!(hoytid_aktiv_dato(10, 28, 1, 2024).as_deref(), Some("halloween"));
+    }
+
+    #[test]
+    fn test_hoytid_mai17() {
+        // 17. mai, fredag (ukedag 5), 2024
+        assert_eq!(hoytid_aktiv_dato(5, 17, 5, 2024).as_deref(), Some("mai17"));
+    }
+
+    #[test]
+    fn test_hoytid_valentins() {
+        // 10. feb, lørdag (ukedag 6), 2024
+        assert_eq!(hoytid_aktiv_dato(2, 10, 6, 2024).as_deref(), Some("valentins"));
+    }
+
+    #[test]
+    fn test_hoytid_ingen_august() {
+        // 15. aug — ingen høytid
+        assert_eq!(hoytid_aktiv_dato(8, 15, 4, 2024), None);
     }
 }
