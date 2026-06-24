@@ -606,6 +606,39 @@
     }
   }
 
+  async function lagreVersjon() {
+    if (!currentOppskrift || !aktivProfil || !kladd) return;
+    historikk = await versjon_lagre(aktivProfil.id, currentOppskrift.id, lagreLabel, kladd);
+    lagreModalApen = false;
+    lagreLabel = "";
+    redigerModus = false;
+  }
+
+  async function slettVersjon(versjonId: string) {
+    if (!currentOppskrift || !aktivProfil) return;
+    historikk = await versjon_slett(aktivProfil.id, currentOppskrift.id, versjonId);
+  }
+
+  function gjenopprettVersjon(versjon: VersjonSnapshot) {
+    if (!currentOppskrift || !aktivProfil) return;
+    kladd = { ...versjon.kopi };
+    sammenlignVersjon = null;
+    redigerModus = true;
+    // Kladd autolages via debounce ved neste oppdaterKladd-kall
+    kladd_sett(aktivProfil.id, currentOppskrift.id, versjon.kopi).catch(console.error);
+  }
+
+  function fmtVersjonTid(iso: string): string {
+    try {
+      return new Intl.DateTimeFormat("nb-NO", {
+        day: "numeric", month: "short", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+      }).format(new Date(iso));
+    } catch {
+      return iso;
+    }
+  }
+
   function oppdaterKladd(nyKopi: OppskriftKopi) {
     kladd = nyKopi;
     if (!currentOppskrift || !aktivProfil) return;
@@ -1685,7 +1718,47 @@
             oninput={(e) => onNotatInput(opp.id, e)}
           ></textarea>
         </section>
+        {#if historikk.length > 0}
+          <section class="versjon-historikk">
+            <div class="versjon-historikk-tittel">📋 Versjonshistorikk ({historikk.length})</div>
+            {#each historikk as v (v.id)}
+              <div class="versjon-rad">
+                <div class="versjon-rad-info">
+                  <span class="versjon-tidspunkt">{fmtVersjonTid(v.lagretTidspunkt)}</span>
+                  {#if v.label}
+                    <span class="versjon-label">{v.label}</span>
+                  {:else}
+                    <span class="versjon-label ingen">Ingen beskrivelse</span>
+                  {/if}
+                </div>
+                <div class="versjon-rad-knapper">
+                  <button class="versjon-btn" onclick={() => sammenlignVersjon = v}>Sammenlign</button>
+                  <button class="versjon-btn" onclick={() => gjenopprettVersjon(v)}>Gjenopprett</button>
+                  <button class="versjon-btn versjon-btn-slett" onclick={() => slettVersjon(v.id)}>Slett</button>
+                </div>
+              </div>
+            {/each}
+          </section>
+        {/if}
       </div>
+      {#if lagreModalApen}
+        <div class="lagre-modal-bakgrunn" role="presentation" onclick={() => lagreModalApen = false}>
+          <div class="lagre-modal" role="dialog" onclick={(e) => e.stopPropagation()}>
+            <div class="lagre-modal-tittel">💾 Lagre versjon</div>
+            <input
+              class="rediger-input"
+              type="text"
+              placeholder="Beskrivelse (valgfri), f.eks. «Med gresskar»"
+              bind:value={lagreLabel}
+              onkeydown={(e) => { if (e.key === "Enter") lagreVersjon(); }}
+            />
+            <div class="lagre-modal-knapper">
+              <button class="lagre-modal-btn" onclick={lagreVersjon}>Lagre</button>
+              <button class="lagre-modal-btn lagre-modal-avbryt" onclick={() => lagreModalApen = false}>Avbryt</button>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
   </div>
 {/if}
@@ -2399,4 +2472,44 @@
     cursor: pointer; font-size: 0.8rem; padding: 2px 6px; color: var(--text-muted);
   }
   .rediger-pil:disabled { opacity: 0.3; cursor: default; }
+
+  /* ── Lagremodal ── */
+  .lagre-modal-bakgrunn {
+    position: absolute; inset: 0; background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 10;
+  }
+  .lagre-modal {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; width: min(340px, 90%); display: flex; flex-direction: column; gap: 12px;
+  }
+  .lagre-modal-tittel { font-weight: 600; font-size: 1rem; }
+  .lagre-modal-knapper { display: flex; gap: 8px; justify-content: flex-end; }
+  .lagre-modal-btn {
+    font-size: 0.85rem; font-family: var(--font-ui);
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 6px 14px; cursor: pointer;
+  }
+  .lagre-modal-avbryt { color: var(--text-muted); }
+
+  /* ── Historikkpanel ── */
+  .versjon-historikk { margin-top: 20px; }
+  .versjon-historikk-tittel { font-weight: 600; font-size: 0.9rem; margin-bottom: 8px; color: var(--text); }
+  .versjon-rad {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px;
+    padding: 8px 0; border-bottom: 1px solid var(--border);
+  }
+  .versjon-rad:last-child { border-bottom: none; }
+  .versjon-rad-info { display: flex; flex-direction: column; gap: 2px; }
+  .versjon-tidspunkt { font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-ui); }
+  .versjon-label { font-size: 0.88rem; }
+  .versjon-label.ingen { color: var(--text-muted); font-style: italic; }
+  .versjon-rad-knapper { display: flex; gap: 6px; }
+  .versjon-btn {
+    font-size: 0.78rem; font-family: var(--font-ui);
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 4px 10px; cursor: pointer;
+  }
+  .versjon-btn-slett { color: var(--text-muted); }
 </style>
