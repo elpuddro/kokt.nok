@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from "@tauri-apps/api/core";
+  import { load } from "@tauri-apps/plugin-store";
   import { onMount, onDestroy } from "svelte";
   import { favorittLast, favorittToggle } from "$lib/favoritter";
   import {
@@ -33,6 +34,7 @@
   let kategorier = $state<any[]>([]);
   let currentKategori = $state("alle");
   let sok = $state("");
+  let sorter = $state("navn_asc");
   let side = $state(1);
   let perSide = $state(24);
   let total = $state(0);
@@ -149,7 +151,7 @@
         side = 1;
       } else {
         const data: any = await invoke("hent_oppskrifter", {
-          kategori: currentKategori, sok, side, perSide, dietter: aktiveDietter,
+          kategori: currentKategori, sok, side, perSide, dietter: aktiveDietter, sorter,
         });
         if (seq !== fetchSeq) return;
         total = data.total;
@@ -196,6 +198,14 @@
     side = 1;
     // Oppdater både rutenettet og sidebar-tellingene (begge påvirkes av filteret).
     kategorier = await invoke("get_kategorier", { dietter: aktiveDietter });
+    await fetchGrid();
+  }
+
+  async function onSorterChange() {
+    const s = await load("sorter.json");
+    await s.set("sorter", sorter);
+    await s.save();
+    side = 1;
     await fetchGrid();
   }
 
@@ -705,6 +715,8 @@
     lager = await lagerLast();
     plan = await matplanLast();
     kategorier = await invoke("get_kategorier", { dietter: aktiveDietter });
+    const sorterStore = await load("sorter.json");
+    sorter = (await sorterStore.get<string>("sorter")) ?? "navn_asc";
     await fetchGrid();
     profilStore = await profilLast();
     if (profilStore.aktivId) {
@@ -883,6 +895,14 @@
       <button class="diett-pille" onclick={() => (currentKategori = "__innst__")}>
         🍽️ {aktiveDietter.length} {aktiveDietter.length === 1 ? "filter" : "filtre"} aktive
       </button>
+    {/if}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__handle__"}
+      <select class="sorter-select" bind:value={sorter} onchange={onSorterChange}>
+        <option value="navn_asc">Navn A–Å</option>
+        <option value="navn_desc">Navn Å–A</option>
+        <option value="tid_asc">Tid: kortest først</option>
+        <option value="tid_desc">Tid: lengst først</option>
+      </select>
     {/if}
   </div>
 
@@ -1762,6 +1782,14 @@
     font-size: 0.82rem; cursor: pointer;
   }
   .diett-pille:hover { border-color: var(--border-focus); }
+  .sorter-select {
+    margin-left: auto;
+    font-size: 0.82rem; font-family: var(--font-ui);
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 8px; cursor: pointer; outline: none;
+  }
+  .sorter-select:focus { border-color: var(--border-focus); }
   #lager-wrap { flex: 1; overflow-y: auto; padding: 24px 32px; max-width: 760px; }
   .lager-rediger, .lager-forslag { margin-bottom: 28px; }
   .lager-liste { list-style: none; padding: 0; }
