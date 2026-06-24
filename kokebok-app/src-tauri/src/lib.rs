@@ -275,6 +275,27 @@ struct ListeSvar {
     per_side: i64,
 }
 
+fn tid_til_min(s: &str) -> Option<i64> {
+    let s = s.trim().to_lowercase();
+    // "X time(r) Y min"
+    if (s.contains("timer") || s.contains("time")) && s.contains("min") {
+        let del = if s.contains("timer") { "timer" } else { "time" };
+        let t: i64 = s.split(del).next()?.trim().parse().ok()?;
+        let m: i64 = s.split(del).nth(1)?.replace("min", "").trim().parse().ok()?;
+        return Some(t * 60 + m);
+    }
+    if s.ends_with("timer") {
+        return s.replace("timer", "").trim().parse::<i64>().ok().map(|t| t * 60);
+    }
+    if s.ends_with("time") {
+        return s.replace("time", "").trim().parse::<i64>().ok().map(|t| t * 60);
+    }
+    if s.ends_with("min") {
+        return s.replace("min", "").trim().parse::<i64>().ok();
+    }
+    None
+}
+
 #[tauri::command]
 fn hent_oppskrifter(
     app: AppHandle,
@@ -283,6 +304,7 @@ fn hent_oppskrifter(
     side: Option<i64>,
     #[allow(non_snake_case)] perSide: Option<i64>,
     dietter: Option<Vec<String>>,
+    sorter: Option<String>,
 ) -> Result<ListeSvar, String> {
     let conn = open(&app)?;
     let side = side.unwrap_or(1).max(1);
@@ -301,15 +323,14 @@ fn hent_oppskrifter(
         }
     }
     if let Some(s) = sok.as_ref() {
-        let s = s.trim();
-        if !s.is_empty() {
+        for ord in s.split_whitespace().take(5) {
+            let like = format!("%{ord}%");
+            owned.push(like.clone());
+            owned.push(like);
             conds.push(
                 "(o.navn LIKE ? OR EXISTS (SELECT 1 FROM ingredienser i \
                  WHERE i.oppskrift_id = o.id AND i.navn LIKE ?))",
             );
-            let like = format!("%{s}%");
-            owned.push(like.clone());
-            owned.push(like);
         }
     }
 
@@ -336,17 +357,48 @@ fn hent_oppskrifter(
         .query_row(&count_sql, filter_refs.as_slice(), |r| r.get(0))
         .map_err(|e| e.to_string())?;
 
-    let list_sql = format!(
-        "SELECT o.id, o.slug, o.navn, o.type, o.porsjoner, o.tid, o.bilde
-         FROM   oppskrifter o {where_sql}
-         ORDER  BY o.navn COLLATE NOCASE
-         LIMIT  ? OFFSET ?"
-    );
-    let mut list_refs: Vec<&dyn rusqlite::ToSql> = filter_refs.clone();
-    list_refs.push(&per_side);
-    list_refs.push(&offset);
+    let sorter_str = sorter.as_deref().unwrap_or("navn_asc");
 
-    let oppskrifter = query_json(&conn, &list_sql, list_refs.as_slice())?;
+    let oppskrifter = if sorter_str == "tid_asc" || sorter_str == "tid_desc" {
+        // Tidssortering: hent alle filtrerte rader, sorter i Rust, paginer manuelt.
+        let alle_sql = format!(
+            "SELECT o.id, o.slug, o.navn, o.type, o.porsjoner, o.tid, o.bilde
+             FROM   oppskrifter o {where_sql}"
+        );
+        let mut rader: Vec<serde_json::Value> =
+            query_json(&conn, &alle_sql, filter_refs.as_slice())?;
+
+        rader.sort_by(|a, b| {
+            let ta = a["tid"].as_str().and_then(tid_til_min);
+            let tb = b["tid"].as_str().and_then(tid_til_min);
+            match (ta, tb) {
+                (Some(x), Some(y)) => if sorter_str == "tid_asc" { x.cmp(&y) } else { y.cmp(&x) },
+                (Some(_), None) => std::cmp::Ordering::Less,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (None, None) => std::cmp::Ordering::Equal,
+            }
+        });
+
+        rader.into_iter()
+            .skip(offset as usize)
+            .take(per_side as usize)
+            .collect()
+    } else {
+        let order = match sorter_str {
+            "navn_desc" => "o.navn COLLATE NOCASE DESC",
+            _           => "o.navn COLLATE NOCASE ASC",
+        };
+        let list_sql = format!(
+            "SELECT o.id, o.slug, o.navn, o.type, o.porsjoner, o.tid, o.bilde
+             FROM   oppskrifter o {where_sql}
+             ORDER  BY {order}
+             LIMIT  ? OFFSET ?"
+        );
+        let mut list_refs: Vec<&dyn rusqlite::ToSql> = filter_refs.clone();
+        list_refs.push(&per_side);
+        list_refs.push(&offset);
+        query_json(&conn, &list_sql, list_refs.as_slice())?
+    };
 
     Ok(ListeSvar {
         total,
@@ -815,7 +867,6 @@ struct Kandidat {
     navn: String,
     type_: String,
     kcal: Option<f64>,
-    fett: Option<f64>,
     ingredienser: Vec<String>,
 }
 
@@ -872,12 +923,12 @@ fn kandidater_for_slot(
         return vec![];
     }
 
-    // Bulk-hent kcal og fett per porsjon for alle kandidater i én query.
+    // Bulk-hent kcal og porsjoner for alle kandidater i én query.
     let id_ph = basis.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let ids: Vec<i64> = basis.iter().map(|(id, _, _)| *id).collect();
     let id_refs: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
 
-    let naering_sql = format!(
+    let kcal_sql = format!(
         "SELECT i.oppskrift_id,
            ROUND(SUM(CASE i.enhet
              WHEN 'g'  THEN i.mengde        * COALESCE(n.energi_kcal,0)/100
@@ -888,15 +939,6 @@ fn kandidater_for_slot(
              WHEN 'ss' THEN i.mengde*15     * COALESCE(n.energi_kcal,0)/100
              WHEN 'ts' THEN i.mengde*5      * COALESCE(n.energi_kcal,0)/100
              ELSE 0 END)) AS energi,
-           ROUND(SUM(CASE i.enhet
-             WHEN 'g'  THEN i.mengde        * COALESCE(n.fett_g,0)/100
-             WHEN 'kg' THEN i.mengde*1000   * COALESCE(n.fett_g,0)/100
-             WHEN 'dl' THEN i.mengde*100    * COALESCE(n.fett_g,0)/100
-             WHEN 'l'  THEN i.mengde*1000   * COALESCE(n.fett_g,0)/100
-             WHEN 'ml' THEN i.mengde        * COALESCE(n.fett_g,0)/100
-             WHEN 'ss' THEN i.mengde*15     * COALESCE(n.fett_g,0)/100
-             WHEN 'ts' THEN i.mengde*5      * COALESCE(n.fett_g,0)/100
-             ELSE 0 END), 1) AS fett_total,
            COUNT(n.ingredient_navn) AS treff,
            o.porsjoner
          FROM ingredienser i
@@ -906,26 +948,21 @@ fn kandidater_for_slot(
          GROUP BY i.oppskrift_id"
     );
     let mut kcal_map: std::collections::HashMap<i64, Option<f64>> = std::collections::HashMap::new();
-    let mut fett_map: std::collections::HashMap<i64, Option<f64>> = std::collections::HashMap::new();
-    if let Ok(mut stmt) = conn.prepare(&naering_sql) {
+    if let Ok(mut stmt) = conn.prepare(&kcal_sql) {
         if let Ok(rows) = stmt.query_map(id_refs.as_slice(), |r| {
-            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<f64>>(1)?, r.get::<_, Option<f64>>(2)?, r.get::<_, i64>(3)?, r.get::<_, Option<f64>>(4)?))
+            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<f64>>(1)?, r.get::<_, i64>(2)?, r.get::<_, Option<f64>>(3)?))
         }) {
             for row in rows.filter_map(|r| r.ok()) {
-                let (opp_id, energi, fett_total, treff, porsjoner) = row;
-                let p = porsjoner.filter(|&p| p > 0.0).unwrap_or(4.0);
+                let (opp_id, energi, treff, porsjoner) = row;
                 let kcal = if treff > 0 {
-                    energi.filter(|&e| e > 0.0).map(|e| (e / p * 10.0).round() / 10.0)
-                } else {
-                    None
-                };
-                let fett = if treff > 0 {
-                    fett_total.filter(|&f| f > 0.0).map(|f| (f / p * 10.0).round() / 10.0)
+                    energi.filter(|&e| e > 0.0).map(|e| {
+                        let p = porsjoner.filter(|&p| p > 0.0).unwrap_or(4.0);
+                        (e / p * 10.0).round() / 10.0
+                    })
                 } else {
                     None
                 };
                 kcal_map.insert(opp_id, kcal);
-                fett_map.insert(opp_id, fett);
             }
         }
     }
@@ -949,9 +986,8 @@ fn kandidater_for_slot(
 
     basis.into_iter().map(|(id, navn, type_)| {
         let kcal = kcal_map.get(&id).copied().flatten();
-        let fett = fett_map.get(&id).copied().flatten();
         let ingredienser = ing_map.remove(&id).unwrap_or_default();
-        Kandidat { id, navn, type_, kcal, fett, ingredienser }
+        Kandidat { id, navn, type_, kcal, ingredienser }
     }).collect()
 }
 
@@ -999,7 +1035,6 @@ fn generer_matplan(
     personer: i64,
     dietter: Option<Vec<String>>,
     laaste: Vec<LaastSlot>,
-    #[allow(non_snake_case)] sunnPlan: bool,
 ) -> Result<UkeSvar, String> {
     use std::collections::HashSet;
     let conn = open(&app)?;
@@ -1057,17 +1092,7 @@ fn generer_matplan(
             if bid.contains(&k.id) { continue; }
             // Jitter er nå posisjon i den shufflede lista (unik per kall) + id-hash.
             let jitter = ((i as f64 * 0.137 + k.id as f64 * 2.399_963 + teller) % 1.0) * 10.0;
-            let mut s = score(k, m, bt, bi, jitter);
-            if sunnPlan && s > 0.0 {
-                if k.kcal.map_or(false, |kc| kc > 600.0) {
-                    s *= 0.5;
-                }
-                if let (Some(kc), Some(ft)) = (k.kcal, k.fett) {
-                    if kc > 0.0 && (ft * 9.0 / kc) > 0.35 {
-                        s *= 0.7;
-                    }
-                }
-            }
+            let s = score(k, m, bt, bi, jitter);
             if s > best_s { best_s = s; best = Some(k); }
         }
         match best {
@@ -1168,68 +1193,6 @@ fn about_info() -> AboutInfo {
 #[tauri::command]
 fn about_info() -> Option<()> { None }
 
-// ─── Forside: tilfeldige oppskrifter etter type-kategori ─────────────────────
-#[derive(serde::Serialize)]
-struct ForsideOppskrift {
-    id: i64,
-    navn: String,
-    tid: Option<String>,
-    bilde: Option<String>,
-}
-
-#[tauri::command]
-fn forside_oppskrifter(
-    app: AppHandle,
-    typer: Vec<String>,
-    #[allow(non_snake_case)] nattFilter: bool,
-) -> Vec<ForsideOppskrift> {
-    let conn = match open(&app) {
-        Ok(c) => c,
-        Err(_) => return vec![],
-    };
-
-    if typer.is_empty() {
-        return vec![];
-    }
-
-    let placeholders = typer.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-
-    let sql = if nattFilter {
-        format!(
-            "SELECT id, navn, tid, bilde FROM oppskrifter \
-             WHERE type IN ({placeholders}) \
-             AND id NOT IN ( \
-                 SELECT DISTINCT oppskrift_id FROM trinn \
-                 WHERE LOWER(tekst) LIKE '%ovn%' \
-                    OR LOWER(tekst) LIKE '%stekepanne%' \
-             ) \
-             ORDER BY RANDOM() LIMIT 20"
-        )
-    } else {
-        format!(
-            "SELECT id, navn, tid, bilde FROM oppskrifter \
-             WHERE type IN ({placeholders}) \
-             ORDER BY RANDOM() LIMIT 20"
-        )
-    };
-
-    let params: Vec<&dyn rusqlite::ToSql> = typer.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
-
-    conn.prepare(&sql)
-        .and_then(|mut stmt| {
-            stmt.query_map(params.as_slice(), |row| {
-                Ok(ForsideOppskrift {
-                    id: row.get(0)?,
-                    navn: row.get(1)?,
-                    tid: row.get(2)?,
-                    bilde: row.get(3)?,
-                })
-            })
-            .and_then(|rows| rows.collect())
-        })
-        .unwrap_or_default()
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1263,9 +1226,35 @@ pub fn run() {
             ingrediens_forslag,
             hva_kan_jeg_lage,
             generer_matplan,
-            about_info,
-            forside_oppskrifter
+            about_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tid_til_min;
+
+    #[test]
+    fn test_tid_til_min_min() {
+        assert_eq!(tid_til_min("30 min"), Some(30));
+    }
+    #[test]
+    fn test_tid_til_min_time() {
+        assert_eq!(tid_til_min("1 time"), Some(60));
+    }
+    #[test]
+    fn test_tid_til_min_time_og_min() {
+        assert_eq!(tid_til_min("1 time 20 min"), Some(80));
+    }
+    #[test]
+    fn test_tid_til_min_ugyldig() {
+        assert_eq!(tid_til_min(""), None);
+        assert_eq!(tid_til_min("ukjent"), None);
+    }
+    #[test]
+    fn test_tid_til_min_2_timer() {
+        assert_eq!(tid_til_min("2 timer 30 min"), Some(150));
+    }
 }
