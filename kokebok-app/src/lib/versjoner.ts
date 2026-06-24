@@ -12,7 +12,7 @@ function hentStore(): Promise<Store> {
 }
 
 // Intern type for hele store-strukturen
-type VersjonerStore = Record<string, Record<string, OppskriftEntry>>;
+type VersjonerStore = Record<string, Record<number, OppskriftEntry>>;
 
 async function hentAlle(): Promise<VersjonerStore> {
   try {
