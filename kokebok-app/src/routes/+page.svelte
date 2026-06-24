@@ -80,11 +80,6 @@
   let forsideOppskrifter = $state<ForsideOppskrift[]>([]);
   let forsideTittel = $state("");
 
-  $effect(() => {
-    if (currentKategori === "alle" && forsideOppskrifter.length === 0) {
-      lastForside();
-    }
-  });
   let cookModeAktiv = $state(false);
   type Timer = { id: number; navn: string; igjen: number; total: number; ferdig: boolean; pauset: boolean };
   let timere = $state<Timer[]>([]);
@@ -204,6 +199,7 @@
     side = 1;
     sok = "";
     fetchGrid();
+    if (k === "alle") lastForside();
   }
 
   function velgFavoritter() {
