@@ -371,12 +371,17 @@ fn hent_oppskrifter(
         rader.sort_by(|a, b| {
             let ta = a["tid"].as_str().and_then(tid_til_min);
             let tb = b["tid"].as_str().and_then(tid_til_min);
-            match (ta, tb) {
+            let by_tid = match (ta, tb) {
                 (Some(x), Some(y)) => if sorter_str == "tid_asc" { x.cmp(&y) } else { y.cmp(&x) },
                 (Some(_), None) => std::cmp::Ordering::Less,
                 (None, Some(_)) => std::cmp::Ordering::Greater,
                 (None, None) => std::cmp::Ordering::Equal,
-            }
+            };
+            by_tid.then_with(|| {
+                let na = a["navn"].as_str().unwrap_or("").to_lowercase();
+                let nb = b["navn"].as_str().unwrap_or("").to_lowercase();
+                na.cmp(&nb)
+            })
         });
 
         rader.into_iter()

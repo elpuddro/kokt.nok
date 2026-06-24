@@ -896,7 +896,7 @@
         🍽️ {aktiveDietter.length} {aktiveDietter.length === 1 ? "filter" : "filtre"} aktive
       </button>
     {/if}
-    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__handle__"}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__handle__" && currentKategori !== "__fav__"}
       <select class="sorter-select" bind:value={sorter} onchange={onSorterChange}>
         <option value="navn_asc">Navn A–Å</option>
         <option value="navn_desc">Navn Å–A</option>
