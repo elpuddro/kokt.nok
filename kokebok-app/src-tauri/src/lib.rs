@@ -815,6 +815,7 @@ struct Kandidat {
     navn: String,
     type_: String,
     kcal: Option<f64>,
+    fett: Option<f64>,
     ingredienser: Vec<String>,
 }
 
@@ -915,6 +916,46 @@ fn kandidater_for_slot(
         }
     }
 
+    // Bulk-hent fett per porsjon for alle kandidater.
+    let fett_sql = format!(
+        "SELECT i.oppskrift_id,
+           ROUND(SUM(CASE i.enhet
+             WHEN 'g'  THEN i.mengde        * COALESCE(n.fett_g,0)/100
+             WHEN 'kg' THEN i.mengde*1000   * COALESCE(n.fett_g,0)/100
+             WHEN 'dl' THEN i.mengde*100    * COALESCE(n.fett_g,0)/100
+             WHEN 'l'  THEN i.mengde*1000   * COALESCE(n.fett_g,0)/100
+             WHEN 'ml' THEN i.mengde        * COALESCE(n.fett_g,0)/100
+             WHEN 'ss' THEN i.mengde*15     * COALESCE(n.fett_g,0)/100
+             WHEN 'ts' THEN i.mengde*5      * COALESCE(n.fett_g,0)/100
+             ELSE 0 END), 1) AS fett_total,
+           COUNT(n.ingredient_navn) AS treff,
+           o.porsjoner
+         FROM ingredienser i
+         LEFT JOIN naering n ON LOWER(TRIM(i.navn)) = LOWER(TRIM(n.ingredient_navn))
+         JOIN oppskrifter o ON o.id = i.oppskrift_id
+         WHERE i.oppskrift_id IN ({id_ph})
+         GROUP BY i.oppskrift_id"
+    );
+    let mut fett_map: std::collections::HashMap<i64, Option<f64>> = std::collections::HashMap::new();
+    if let Ok(mut stmt) = conn.prepare(&fett_sql) {
+        if let Ok(rows) = stmt.query_map(id_refs.as_slice(), |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, Option<f64>>(1)?, r.get::<_, i64>(2)?, r.get::<_, Option<f64>>(3)?))
+        }) {
+            for row in rows.filter_map(|r| r.ok()) {
+                let (opp_id, fett_total, treff, porsjoner) = row;
+                let fett = if treff > 0 {
+                    fett_total.filter(|&f| f > 0.0).map(|f| {
+                        let p = porsjoner.filter(|&p| p > 0.0).unwrap_or(4.0);
+                        (f / p * 10.0).round() / 10.0
+                    })
+                } else {
+                    None
+                };
+                fett_map.insert(opp_id, fett);
+            }
+        }
+    }
+
     // Bulk-hent ingrediensnavn for alle kandidater i én query.
     let ing_sql = format!(
         "SELECT oppskrift_id, LOWER(navn) FROM ingredienser \
@@ -934,8 +975,9 @@ fn kandidater_for_slot(
 
     basis.into_iter().map(|(id, navn, type_)| {
         let kcal = kcal_map.get(&id).copied().flatten();
+        let fett = fett_map.get(&id).copied().flatten();
         let ingredienser = ing_map.remove(&id).unwrap_or_default();
-        Kandidat { id, navn, type_, kcal, ingredienser }
+        Kandidat { id, navn, type_, kcal, fett, ingredienser }
     }).collect()
 }
 
@@ -983,6 +1025,7 @@ fn generer_matplan(
     personer: i64,
     dietter: Option<Vec<String>>,
     laaste: Vec<LaastSlot>,
+    #[allow(non_snake_case)] sunnPlan: bool,
 ) -> Result<UkeSvar, String> {
     use std::collections::HashSet;
     let conn = open(&app)?;
@@ -1040,7 +1083,17 @@ fn generer_matplan(
             if bid.contains(&k.id) { continue; }
             // Jitter er nå posisjon i den shufflede lista (unik per kall) + id-hash.
             let jitter = ((i as f64 * 0.137 + k.id as f64 * 2.399_963 + teller) % 1.0) * 10.0;
-            let s = score(k, m, bt, bi, jitter);
+            let mut s = score(k, m, bt, bi, jitter);
+            if sunnPlan {
+                if k.kcal.map_or(false, |kc| kc > 600.0) {
+                    s *= 0.5;
+                }
+                if let (Some(kc), Some(ft)) = (k.kcal, k.fett) {
+                    if kc > 0.0 && (ft * 9.0 / kc) > 0.35 {
+                        s *= 0.7;
+                    }
+                }
+            }
             if s > best_s { best_s = s; best = Some(k); }
         }
         match best {
