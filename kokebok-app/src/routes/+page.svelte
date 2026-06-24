@@ -1036,7 +1036,7 @@
               </label>
               {#if !midjeOverGrenjeFelt}
                 <p class="midjefilter-info">
-                  Midjemålet er innenfor normalområdet — filteret har liten effekt.
+                  Midjemålet er innenfor normalområdet — filteret er ikke aktivt.
                 </p>
               {/if}
             {/if}
