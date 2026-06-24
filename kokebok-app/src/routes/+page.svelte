@@ -1208,35 +1208,34 @@
     </div>
   {/if}
 
-  {#if currentKategori === "alle" && !sok && forsideOppskrifter.length > 0}
-    <div class="forside-wrap">
-      <div class="forside-header">
-        <h2 class="forside-tittel">{forsideTittel}</h2>
-        <p class="forside-undertekst">Forslag til deg akkurat nå</p>
-      </div>
-      <div class="forside-grid">
-        {#each forsideOppskrifter as o (o.id)}
-          <article class="recipe-card" onclick={() => åpneOppskrift(o.id)}>
-            <div class="card-img-wrap">
-              {#if imgSrc(o.id)}
-                <img src={imgSrc(o.id)} alt={o.navn} loading="lazy" />
-              {:else}
-                <div class="card-img-placeholder">🍽️</div>
-              {/if}
-              {#if o.tid}<div class="card-badge-time">⏱ {o.tid}</div>{/if}
-            </div>
-            <div class="card-body">
-              <div class="card-name">{o.navn}</div>
-            </div>
-          </article>
-        {/each}
-      </div>
-      <hr class="forside-skille" />
-    </div>
-  {/if}
-
   {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
   <div id="grid-wrap">
+    {#if currentKategori === "alle" && !sok && forsideOppskrifter.length > 0}
+      <div class="forside-wrap">
+        <div class="forside-header">
+          <h2 class="forside-tittel">{forsideTittel}</h2>
+          <p class="forside-undertekst">Forslag til deg akkurat nå</p>
+        </div>
+        <div class="forside-grid">
+          {#each forsideOppskrifter as o (o.id)}
+            <article class="recipe-card" onclick={() => åpneOppskrift(o.id)}>
+              <div class="card-img-wrap">
+                {#if imgSrc(o.id)}
+                  <img src={imgSrc(o.id)} alt={o.navn} loading="lazy" />
+                {:else}
+                  <div class="card-img-placeholder">🍽️</div>
+                {/if}
+                {#if o.tid}<div class="card-badge-time">⏱ {o.tid}</div>{/if}
+              </div>
+              <div class="card-body">
+                <div class="card-name">{o.navn}</div>
+              </div>
+            </article>
+          {/each}
+        </div>
+        <hr class="forside-skille" />
+      </div>
+    {/if}
     <div id="recipe-grid">
       {#if oppskrifter.length === 0}
         <div class="empty-state">
