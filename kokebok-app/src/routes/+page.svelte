@@ -269,6 +269,20 @@
     profilStore = await profilSettAktiv(id);
     profilDropdownÅpen = false;
     if (aktivProfil) planDagsmaal = tdee(aktivProfil);
+    // Refresh versioning state if a recipe is open under the new profile
+    if (currentOppskrift) {
+      const nyProfil = profilStore.profiler.find(p => p.id === profilStore.aktivId) ?? null;
+      if (nyProfil) {
+        const entry = await versjonerLast(nyProfil.id, currentOppskrift.id);
+        kladd = entry?.kladd ?? null;
+        historikk = entry?.historikk ?? [];
+      } else {
+        kladd = null;
+        historikk = [];
+      }
+      redigerModus = false;
+      sammenlignVersjon = null;
+    }
   }
 
   function startNyProfil() {
@@ -609,6 +623,7 @@
   async function lagreVersjon() {
     if (!currentOppskrift || !aktivProfil || !kladd) return;
     historikk = await versjon_lagre(aktivProfil.id, currentOppskrift.id, lagreLabel, kladd);
+    kladd = null;  // kladd-innholdet er nå lagret som versjon; fjern indikator-dot
     lagreModalApen = false;
     lagreLabel = "";
     redigerModus = false;
