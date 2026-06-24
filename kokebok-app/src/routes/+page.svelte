@@ -13,7 +13,7 @@
   import { matplanLast, matplanLagre, matplanTøm, type Uke, type Dag } from "$lib/matplan";
   import { utlopsStatus } from "$lib/lager-logikk";
   import { finnTider } from "$lib/tid-parsing";
-  import { profilLast, profilSettAktiv, profilOpprett, profilOppdater, profilSlett, tdee, dagsbehov, dekningsProsent, type Brukerprofil, type ProfilStore } from "$lib/helse";
+  import { profilLast, profilSettAktiv, profilOpprett, profilOppdater, profilSlett, tdee, dagsbehov, dekningsProsent, midjeOverGrenje, type Brukerprofil, type ProfilStore } from "$lib/helse";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -62,7 +62,7 @@
   let profilDropdownÅpen = $state(false);
   let profilSkjemaÅpent = $state(false);
   let profilRedigerer = $state<Brukerprofil | null>(null);
-  let profilFelt = $state({ navn: "", kjønn: "mann" as "mann"|"kvinne", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat" as Brukerprofil["aktivitet"], mål: "vedlikehold" as Brukerprofil["mål"] });
+  let profilFelt = $state({ navn: "", kjønn: "mann" as "mann"|"kvinne", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat" as Brukerprofil["aktivitet"], mål: "vedlikehold" as Brukerprofil["mål"], midje: undefined as number | undefined, midjeFilter: false });
   let aboutInfo = $state<{ navn: string; epost: string; versjon: string; beskrivelse: string } | null>(null);
   let innstFane = $state<"tema" | "diett" | "profil">("tema");
 
@@ -89,6 +89,11 @@
 
   let aktivProfil = $derived(
     profilStore.profiler.find((p) => p.id === profilStore.aktivId) ?? null
+  );
+  let aktivtMidjeFilter = $derived(aktivProfil ? midjeOverGrenje(aktivProfil) : false);
+  let midjeOverGrenjeFelt = $derived(
+    profilFelt.midje != null &&
+    (profilFelt.kjønn === "mann" ? profilFelt.midje > 94 : profilFelt.midje > 80)
   );
 
   let pages = $derived(Math.ceil(total / perSide));
@@ -247,13 +252,23 @@
 
   function startNyProfil() {
     profilRedigerer = null;
-    profilFelt = { navn: "", kjønn: "mann", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat", mål: "vedlikehold" };
+    profilFelt = { navn: "", kjønn: "mann", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat", mål: "vedlikehold", midje: undefined, midjeFilter: false };
     profilSkjemaÅpent = true;
   }
 
   function startRedigerProfil(p: Brukerprofil) {
     profilRedigerer = p;
-    profilFelt = { navn: p.navn, kjønn: p.kjønn, alder: p.alder, høyde: p.høyde, vekt: p.vekt, aktivitet: p.aktivitet, mål: p.mål };
+    profilFelt = {
+      navn: p.navn,
+      kjønn: p.kjønn,
+      alder: p.alder,
+      høyde: p.høyde,
+      vekt: p.vekt,
+      aktivitet: p.aktivitet,
+      mål: p.mål,
+      midje: p.midje,
+      midjeFilter: p.midjeFilter ?? false,
+    };
     profilSkjemaÅpent = true;
   }
 
@@ -313,6 +328,7 @@
         personer: planPersoner,
         dietter: aktiveDietter,
         laaste: samleLaaste(),
+        sunnPlan: aktivtMidjeFilter,
       });
       plan = uke;
     } catch (e) {
@@ -978,7 +994,7 @@
           <div class="profil-kort" class:aktiv-profil={p.id === profilStore.aktivId}>
             <div class="profil-kort-info">
               <strong>{p.navn}</strong>
-              <span>{tdee(p)} kcal/dag</span>
+              <span>{tdee(p)} kcal/dag {midjeOverGrenje(p) ? "🎯" : ""}</span>
               {#if p.id === profilStore.aktivId}<span class="aktiv-merke">● Aktiv</span>{/if}
             </div>
             <div class="profil-kort-knapper">
@@ -1008,6 +1024,22 @@
             <label>Alder (år) <input type="number" min="10" max="120" bind:value={profilFelt.alder} /></label>
             <label>Høyde (cm) <input type="number" min="100" max="250" bind:value={profilFelt.høyde} /></label>
             <label>Vekt (kg) <input type="number" min="30" max="300" step="0.5" bind:value={profilFelt.vekt} /></label>
+            <label>Midjemål (cm) — valgfritt
+              <input type="number" min="50" max="200"
+                bind:value={profilFelt.midje}
+                placeholder="f.eks. 88" />
+            </label>
+            {#if profilFelt.midje}
+              <label class="midjefilter-label">
+                <input type="checkbox" bind:checked={profilFelt.midjeFilter} />
+                Filtrer matplan mot sunnere oppskrifter
+              </label>
+              {#if !midjeOverGrenjeFelt}
+                <p class="midjefilter-info">
+                  Midjemålet er innenfor normalområdet — filteret har liten effekt.
+                </p>
+              {/if}
+            {/if}
             <label>Aktivitetsnivå
               <select bind:value={profilFelt.aktivitet}>
                 <option value="stillesittende">Stillesittende (lite/ingen trening)</option>
@@ -2119,4 +2151,7 @@
     border: none; border-top: 1px solid var(--border);
     margin: 0 0 24px;
   }
+  /* ── Midjefilter ──────────────────────────────────────────── */
+  .midjefilter-label { display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; }
+  .midjefilter-info { font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 8px; }
 </style>
