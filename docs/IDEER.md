@@ -3,7 +3,7 @@
 Hver ny idé bør gjennom brainstorming → spec → plan før implementering
 (se `docs/superpowers/`).
 
-Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-17.
+Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24.
 
 ---
 
@@ -79,61 +79,75 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-17.
     flere samtidige timere i globalt panel, Web Audio-pip + visuell blink.
     Samme spec/plan som #11.
 
-13. **«Hva har jeg i kjøleskapet?»** — bruker legger inn råvarer de har, appen
-    foreslår oppskrifter som bruker disse (mest mulig dekning først) for å
-    redusere matsvinn. **Skjult kostnad:** match brukerens råvarer mot
-    `ingredienser.navn` over 5962 oppskrifter og ranger på dekningsgrad
-    (hvor stor andel av oppskriftens ingredienser brukeren har). Kan bygge på
-    eksisterende ingrediens-søk; rangeringslogikken er kjernen.
+~~13. **«Hva har jeg i kjøleskapet?»**~~ — slått inn i #14 nedenfor.
 
 ---
 
-## 💡 Nye idéer (lagt til 2026-06-19, ikke designet ennå)
+## 💡 Nye idéer (lagt til 2026-06-19+)
 
 > **Forkastet (krever AI/LLM ved kjøretid → kolliderer med offline-/luftgap-
 > distribusjonen):** ~~AI-oppskriftsgenerator~~ og ~~næringsanalyse-helseprofil
-> med AI-forslag~~ ble vurdert og lagt bort 2026-06-19. (Versjonering #18 har en
-> mindre AI-fristelse, men er fullt mulig regelbasert.)
+> med AI-forslag~~ ble vurdert og lagt bort 2026-06-19.
 
-14. **Lagerstyring + «Hva har jeg i kjøleskapet?»** (slår sammen tidligere
-    #13/#16/#17) — bruker registrerer beholdning i skap/kjøl/fryser; appen holder
-    oversikt, trekker fra brukte ingredienser, varsler om utløp, og foreslår
-    oppskrifter som «kan lages nå» / «mangler få» / «bør brukes før utløp».
-    **Skjult kostnad:** ny skrivbar datamodell (beholdning + utløpsdato) + match
-    av beholdning mot `ingredienser.navn` over 5962 oppskrifter med
-    dekningsgrad-rangering. Ren frontend + Tauri Store. Ingen AI.
-    **Under arbeid 2026-06-19.**
+~~14. **Lagerstyring + «Hva har jeg i kjøleskapet?»**~~ — ✅ **FERDIG 2026-06-20.**
+    Beholdning i skap/kjøl/fryser, utløpsvarsler, «kan lages nå»-matching
+    (dekningsgrad-rangering) + «Lagde denne»-knapp trekker brukte ingredienser
+    fra lager. Tauri Store (`lager.json`). Ingen AI.
+    Spec: `docs/superpowers/specs/2026-06-19-lager-kjoeleskap-design.md`.
 
-15. **Smart matplanlegger** — ukemeny ut fra budsjett, kalorimål, antall personer
-    og kosthold; genererer meny + samlet handleliste. Bygger på handlelista +
-    porsjonsskalering + pris/næring som alt finnes. Kjernen (constraint-løsing:
-    velg retter som treffer budsjett/kalori/diett) gjøres **regelbasert uten AI**.
-    Overlapper #6 (ukesmeny). **Under arbeid 2026-06-19.**
+~~15. **Smart matplanlegger**~~ — ✅ **FERDIG 2026-06-22.** Ukemeny (frokost/lunsj/
+    middag/kveldsmat × 7 dager) ut fra kalorimål, diettfiltre og ingredienstyper.
+    Scoring + grådig fyll i Rust, lås/reroll per slot, send ukemeny til
+    handleliste, lagring i Tauri Store. Ingen AI.
+    Spec: `docs/superpowers/specs/2026-06-22-matplanlegger-design.md`.
 
-18. **Oppskriftsversjonering («Git for mat»)** — bruker lagrer egne endringer av en
-    oppskrift som versjoner (Lasagne v1.0 → v1.1 «mer hvitløk» → v2.0), kan
-    sammenligne/gjenopprette/bla bakover. **Skjult kostnad:** skrivbar versjonert
-    datamodell (diff/historikk per oppskrift) + diff-UI. Bygger på «egne
-    oppskrifter»-utvidelsen nevnt under notater (#7). Ingen AI.
+5. ~~**Bedre søk / filtrering**~~ — ✅ **FERDIG 2026-06-24.** AND-søk (hvert ord
+   matcher navn eller ingredienser), sorteringsvalg (navn A–Å/Å–A, tid kortest/
+   lengst) i header-dropdown, persistert i Tauri Store. 5 unit-tester for
+   `tid_til_min`-parser.
+   Spec: `docs/superpowers/specs/2026-06-24-bedre-sok-design.md`.
 
-19. **Vinanbefaling fra Vinmonopolet** — skrap salgbare produkter fra
-    vinmonopolet.no (filtrert til «kan kjøpes» / leveres på post/dør, 18-års
-    aldersgrense) og match viner mot oppskrifter via Vinmonopolets egne
-    mat-/ingrediens-beskrivelser. Foreslå vin som passer en oppskrifts råvarer.
-    **Skjult kostnad:** ny skraper + datakilde (vin-tabell + mat-match-felt),
-    matching av vinens mat-beskrivelse mot oppskriftens ingredienser, robusthet
-    mot endringer i nettsiden. Ikke designet ennå — krever brainstorming. Lagt
-    til 2026-06-22.
+18. ~~**Oppskriftsversjonering («Git for mat»)**~~ — **Plan klar 2026-06-24.**
+    Bruker redigerer personlig kopi av scraped oppskrift (ingredienser, trinn,
+    navn, beskrivelse, porsjoner, tid), manuelt lagrer versjoner med label,
+    sammenligner mot original (fargekodet to-kolonne diff) og gjenoppretter.
+    Profil-spesifikk, Tauri Store (`versjoner.json`). Ingen AI.
+    Spec: `docs/superpowers/specs/2026-06-24-oppskriftsversjonering-design.md`.
+    Plan: `docs/superpowers/plans/2026-06-24-oppskriftsversjonering.md`.
 
-20. **Næringsanalyse og helseprofil** — bruker legger inn høyde, vekt og
-    aktivitetsnivå (gange, jogging, vektløfting m.fl.); appen beregner BMI og
-    TDEE (Mifflin-St Jeor + aktivitetsfaktor) regelbasert uten AI. Bruker angir
-    mål (vektnedgang/vedlikehold/vektøkning). Appen analyserer oppskrifter mot
-    profilen og gir ukesforslag (bygger på matplanleggeren #15, drevet av TDEE
-    i stedet for manuelt kalorimål). Viser: kalorier, protein, karbohydrat, fett,
-    fiber, vitaminer (vitaminer krever utvidelse av naering-tabellen fra
-    Matvaretabellen.no). Kan tilpasses: lavkarbo, vegetar, vegan, glutenfri,
-    diabetesvennlig (bygger på eksisterende kosthold-filter #9/#10).
-    **Skjult kostnad:** vitamin-kolonner i naering mangler i dag; ny
-    brukerprofil-datamodell (Tauri Store); TDEE-formel er trivielt regelbasert.
-    Lagt til 2026-06-22.
+~~19. **Vinanbefaling fra Vinmonopolet**~~ — **STRØKET 2026-06-22.** API-problemer
+    med Vinmonopolet; uforutsigbar tilgjengelighet og struktur gjør vedlikehold
+    for krevende.
+
+~~20. **Næringsanalyse og helseprofil**~~ — ✅ **FERDIG 2026-06-23.** Brukerprofil
+    (navn, kjønn, alder, høyde, vekt, aktivitet, mål) med TDEE (Mifflin-St Jeor)
+    og dagsbehov (kcal/protein/fett/karbo). Andel-av-dagsbehov-panel i
+    detaljvisning. Aktivt profil-merke i header.
+    Spec: `docs/superpowers/specs/2026-06-23-helseprofil-design.md`.
+
+21. ~~**Tidsbasert forside**~~ — ✅ **FERDIG 2026-06-23.** Forsiden foreslår
+    oppskrifter etter tidspunkt (frokost 06–10, lunsj 10–14, middag 14–18,
+    kveld 18–22). Henter fra `forside_oppskrifter` Rust-kommando.
+    Spec: `docs/superpowers/specs/2026-06-23-tidsbasert-forside-design.md`.
+
+22. ~~**Midjefilter og sunnere matplan**~~ — ✅ **FERDIG 2026-06-24.** Midjemål i
+    helseprofil; over grense (94 cm mann / 80 cm kvinne) aktiveres fett-penalty
+    i matplanleggeren (`sunnPlan`-modus). Vises i profilkort.
+    Spec: `docs/superpowers/specs/2026-06-24-midjefilter-design.md`.
+
+---
+
+## 💡 Idéer ikke designet ennå
+
+6. **Ukesmeny / måltidsplan (utvidet)** — allerede dekket av #15, men rom for
+   utvidelser: budsjett per uke, sesong-spesifikke retter (se #23 nedenfor).
+
+23. **Sesong- og høytidsspesifikke oppskriftsforslag** — forsiden (og evt.
+    matplanleggeren) fremhever retter knyttet til høytider og matdager: pinnekjøtt
+    og ribbe til jul, kalkun til Thanksgiving, lam til påske, bidos til samisk
+    nasjonaldag, jordbær til sankthans, fårikål til fårikålens dag (siste tordag i
+    sept.), valentinesmiddag, etc. Bygger på eksisterende temaer (#8) og tidsbasert
+    forside (#21) — ny «høytids-modus» der forsiden byttes til sesong-kurert liste
+    i stedet for tidspunktbasert. **Skjult kostnad:** manuell tagging av oppskrifter
+    per høytid (kan gjøres med nøkkelord-regler på ingredienser/navn), eller en
+    dedikert `hoytid`-kolonne i `kategorier`-tabellen. Lagt til 2026-06-24.
