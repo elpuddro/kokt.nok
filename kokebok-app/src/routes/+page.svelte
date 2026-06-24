@@ -1763,6 +1763,103 @@
   </div>
 {/if}
 
+{#if sammenlignVersjon && currentOppskrift}
+  {@const origKopi = kopiFraOppskrift(currentOppskrift)}
+  {@const diff = beregnDiff(origKopi, sammenlignVersjon.kopi)}
+  <div
+    id="sammenlign-overlay"
+    role="presentation"
+    onclick={(e) => { if (e.target === e.currentTarget) sammenlignVersjon = null; }}
+  >
+    <div id="sammenlign-panel">
+      <div class="sammenlign-topbar">
+        <span class="sammenlign-tittel">📊 Sammenlign: {sammenlignVersjon.label || fmtVersjonTid(sammenlignVersjon.lagretTidspunkt)}</span>
+        <button class="sammenlign-lukk" onclick={() => sammenlignVersjon = null}>✕ Lukk</button>
+        <button class="sammenlign-bruk" onclick={() => gjenopprettVersjon(sammenlignVersjon!)}>Bruk denne versjonen</button>
+      </div>
+
+      <div class="sammenlign-body">
+        <!-- Metadata -->
+        {#if diff.navn.endret || diff.beskrivelse.endret || diff.porsjoner.endret || diff.tid.endret}
+          <div class="sammenlign-seksjon-tittel">Metadata</div>
+          <div class="sammenlign-meta-grid">
+            {#if diff.navn.endret}
+              <div class="sammenlign-meta-felt">Navn</div>
+              <div class="sammenlign-orig">{diff.navn.orig}</div>
+              <div class="sammenlign-versjon">{diff.navn.versjon}</div>
+            {/if}
+            {#if diff.beskrivelse.endret}
+              <div class="sammenlign-meta-felt">Beskrivelse</div>
+              <div class="sammenlign-orig">{diff.beskrivelse.orig ?? "–"}</div>
+              <div class="sammenlign-versjon">{diff.beskrivelse.versjon ?? "–"}</div>
+            {/if}
+            {#if diff.porsjoner.endret}
+              <div class="sammenlign-meta-felt">Porsjoner</div>
+              <div class="sammenlign-orig">{diff.porsjoner.orig ?? "–"}</div>
+              <div class="sammenlign-versjon">{diff.porsjoner.versjon ?? "–"}</div>
+            {/if}
+            {#if diff.tid.endret}
+              <div class="sammenlign-meta-felt">Tid</div>
+              <div class="sammenlign-orig">{diff.tid.orig ?? "–"}</div>
+              <div class="sammenlign-versjon">{diff.tid.versjon ?? "–"}</div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Ingredienser -->
+        <div class="sammenlign-seksjon-tittel">Ingredienser</div>
+        <div class="sammenlign-tabell-hdr">
+          <div>Original</div><div>Din versjon</div>
+        </div>
+        {#each diff.ingredienser as d}
+          <div
+            class="sammenlign-rad"
+            class:endret={d.endret && d.orig !== null && d.versjon !== null}
+            class:ny={d.orig === null}
+            class:slettet={d.versjon === null}
+          >
+            <div class="sammenlign-celle">
+              {#if d.orig}
+                {d.orig.mengde ?? ""} {d.orig.enhet ?? ""} {d.orig.navn ?? ""}
+              {:else}
+                <span class="sammenlign-tom">–</span>
+              {/if}
+            </div>
+            <div class="sammenlign-celle">
+              {#if d.versjon}
+                {d.versjon.mengde ?? ""} {d.versjon.enhet ?? ""} {d.versjon.navn ?? ""}
+              {:else}
+                <span class="sammenlign-tom">–</span>
+              {/if}
+            </div>
+          </div>
+        {/each}
+
+        <!-- Trinn -->
+        <div class="sammenlign-seksjon-tittel">Fremgangsmåte</div>
+        <div class="sammenlign-tabell-hdr">
+          <div>Original</div><div>Din versjon</div>
+        </div>
+        {#each diff.trinn as d, i}
+          <div
+            class="sammenlign-rad"
+            class:endret={d.endret && d.orig !== null && d.versjon !== null}
+            class:ny={d.orig === null}
+            class:slettet={d.versjon === null}
+          >
+            <div class="sammenlign-celle sammenlign-celle-trinn">
+              {#if d.orig}<span class="sammenlign-trinn-nr">{i + 1}.</span> {d.orig.tekst}{:else}<span class="sammenlign-tom">–</span>{/if}
+            </div>
+            <div class="sammenlign-celle sammenlign-celle-trinn">
+              {#if d.versjon}<span class="sammenlign-trinn-nr">{i + 1}.</span> {d.versjon.tekst}{:else}<span class="sammenlign-tom">–</span>{/if}
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </div>
+{/if}
+
 {#if loading}
   <div id="loader"><div class="spinner"></div></div>
 {/if}
@@ -2512,4 +2609,50 @@
     padding: 4px 10px; cursor: pointer;
   }
   .versjon-btn-slett { color: var(--text-muted); }
+
+  /* ── Sammenligningsoverlay ── */
+  #sammenlign-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+    display: flex; align-items: stretch; justify-content: flex-end; z-index: 200;
+  }
+  #sammenlign-panel {
+    background: var(--bg); width: min(720px, 100vw);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .sammenlign-topbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+  }
+  .sammenlign-tittel { font-weight: 600; flex: 1; font-size: 0.92rem; }
+  .sammenlign-lukk, .sammenlign-bruk {
+    font-size: 0.82rem; font-family: var(--font-ui);
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 12px; cursor: pointer;
+  }
+  .sammenlign-body { flex: 1; overflow-y: auto; padding: 16px; }
+  .sammenlign-seksjon-tittel { font-weight: 600; font-size: 0.88rem; margin: 16px 0 6px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .sammenlign-meta-grid {
+    display: grid; grid-template-columns: auto 1fr 1fr; gap: 4px 12px; margin-bottom: 8px;
+    font-size: 0.88rem;
+  }
+  .sammenlign-meta-felt { color: var(--text-muted); font-family: var(--font-ui); }
+  .sammenlign-tabell-hdr {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+    font-size: 0.78rem; color: var(--text-muted); font-family: var(--font-ui);
+    border-bottom: 1px solid var(--border); padding-bottom: 4px; margin-bottom: 4px;
+  }
+  .sammenlign-rad {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+    padding: 4px 6px; border-radius: var(--radius-sm); font-size: 0.88rem;
+  }
+  .sammenlign-rad.endret { background: rgba(255, 200, 0, 0.12); }
+  .sammenlign-rad.ny { background: rgba(0, 180, 80, 0.12); }
+  .sammenlign-rad.slettet { background: rgba(220, 50, 50, 0.12); }
+  .sammenlign-celle { padding: 2px 0; }
+  .sammenlign-celle-trinn { white-space: pre-wrap; }
+  .sammenlign-trinn-nr { font-weight: 600; color: var(--text-muted); margin-right: 4px; }
+  .sammenlign-orig { color: var(--text-muted); }
+  .sammenlign-versjon { color: var(--text); }
+  .sammenlign-tom { color: var(--text-muted); font-style: italic; }
 </style>
