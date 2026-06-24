@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Rekomprimer kokebok-bildene: skaler lengste side til 600px, WebP q78.
+"""Rekomprimer kokebok-bildene: skaler lengste side til 400px, WebP q75.
 
 In-place over kokebok-app/src-tauri/data/bilder/*.webp. Idempotent: hopper over
-filer som allerede er <= 600px slik at gjentatte kjoringer ikke forringer videre.
+filer som allerede er <= 400px slik at gjentatte kjoringer ikke forringer videre.
 Krever Pillow (pip install Pillow).
 """
 import sys
@@ -13,8 +13,8 @@ try:
 except ImportError:
     sys.exit("Pillow mangler. Kjor: pip install Pillow")
 
-SIDE = 600
-KVALITET = 78
+SIDE = 400
+KVALITET = 75
 BILDER = Path(__file__).resolve().parent.parent / "kokebok-app" / "src-tauri" / "data" / "bilder"
 
 
@@ -27,10 +27,8 @@ def main() -> None:
 
     endret = hoppet = 0
     for f in filer:
-        # Lukk kildefila med ein gong convert() har laga eit nytt bilete i minnet,
-        # so vi ikkje samlar opp opne filhandtak over 4444 filer.
         with Image.open(f) as src:
-            im = src.convert("RGB")  # recipe-bilete har ingen alpha; RGB er trygt
+            im = src.convert("RGB")
         w, h = im.size
         storst = max(w, h)
         if storst <= SIDE:
