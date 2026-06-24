@@ -874,6 +874,7 @@ struct Kandidat {
     kcal: Option<f64>,
     fett: Option<f64>,
     ingredienser: Vec<String>,
+    hoytid: Option<String>,
 }
 
 // Hent kvalifiserte kandidater for én slot: mapper til slot + passer diett-filtre.
@@ -902,7 +903,7 @@ fn kandidater_for_slot(
     };
 
     let sql = format!(
-        "SELECT o.id, o.navn, o.type FROM oppskrifter o \
+        "SELECT o.id, o.navn, o.type, o.hoytid FROM oppskrifter o \
          WHERE o.type IN ({kat_ph}){diett_where} LIMIT 400"
     );
     let refs: Vec<&dyn rusqlite::ToSql> =
@@ -913,15 +914,15 @@ fn kandidater_for_slot(
         Err(_) => return vec![],
     };
     let rader = stmt.query_map(refs.as_slice(), |r| {
-        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?))
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?, r.get::<_, Option<String>>(3)?))
     });
     let rader = match rader {
         Ok(r) => r,
         Err(_) => return vec![],
     };
 
-    // Samle alle kandidater først (ID, navn, type).
-    let mut basis: Vec<(i64, String, String)> = Vec::new();
+    // Samle alle kandidater først (ID, navn, type, hoytid).
+    let mut basis: Vec<(i64, String, String, Option<String>)> = Vec::new();
     for row in rader.filter_map(|r| r.ok()) {
         basis.push(row);
     }
@@ -931,7 +932,7 @@ fn kandidater_for_slot(
 
     // Bulk-hent kcal, fett og porsjoner for alle kandidater i én query.
     let id_ph = basis.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-    let ids: Vec<i64> = basis.iter().map(|(id, _, _)| *id).collect();
+    let ids: Vec<i64> = basis.iter().map(|(id, _, _, _)| *id).collect();
     let id_refs: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
 
     let naering_sql = format!(
@@ -1004,11 +1005,11 @@ fn kandidater_for_slot(
         }
     }
 
-    basis.into_iter().map(|(id, navn, type_)| {
+    basis.into_iter().map(|(id, navn, type_, hoytid)| {
         let kcal = kcal_map.get(&id).copied().flatten();
         let fett = fett_map.get(&id).copied().flatten();
         let ingredienser = ing_map.remove(&id).unwrap_or_default();
-        Kandidat { id, navn, type_, kcal, fett, ingredienser }
+        Kandidat { id, navn, type_, kcal, fett, ingredienser, hoytid }
     }).collect()
 }
 
@@ -1057,6 +1058,7 @@ fn generer_matplan(
     dietter: Option<Vec<String>>,
     laaste: Vec<LaastSlot>,
     #[allow(non_snake_case)] sunnPlan: bool,
+    hoytid: Option<String>,
 ) -> Result<UkeSvar, String> {
     use std::collections::HashSet;
     let conn = open(&app)?;
@@ -1122,6 +1124,14 @@ fn generer_matplan(
                 if let (Some(kc), Some(ft)) = (k.kcal, k.fett) {
                     if kc > 0.0 && (ft * 9.0 / kc) > 0.35 {
                         s *= 0.7;
+                    }
+                }
+            }
+            // Sesong-bonus: +50 for høytidsmerket rett
+            if let Some(ref h) = hoytid {
+                if let Some(ref opp_hoytid) = k.hoytid {
+                    if opp_hoytid.split(',').any(|t| t.trim() == h.as_str()) {
+                        s += 50.0;
                     }
                 }
             }
