@@ -15,6 +15,8 @@
   import { utlopsStatus } from "$lib/lager-logikk";
   import { finnTider } from "$lib/tid-parsing";
   import { profilLast, profilSettAktiv, profilOpprett, profilOppdater, profilSlett, tdee, dagsbehov, dekningsProsent, midjeOverGrenje, type Brukerprofil, type ProfilStore } from "$lib/helse";
+  import { versjonerLast, kladd_sett, kladd_fjern, versjon_lagre, versjon_slett } from "$lib/versjoner";
+  import { kopiFraOppskrift, beregnDiff, type OppskriftKopi, type KopiIngrediens, type KopiTrinn, type VersjonSnapshot } from "$lib/versjoner-logikk";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -67,6 +69,15 @@
   let profilFelt = $state({ navn: "", kjønn: "mann" as "mann"|"kvinne", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat" as Brukerprofil["aktivitet"], mål: "vedlikehold" as Brukerprofil["mål"], midje: undefined as number | undefined, midjeFilter: false });
   let aboutInfo = $state<{ navn: string; epost: string; versjon: string; beskrivelse: string } | null>(null);
   let innstFane = $state<"tema" | "diett" | "profil">("tema");
+
+  // ── Versjonering / redigering ────────────────────────────────────────────────
+  let redigerModus = $state(false);
+  let kladd = $state<OppskriftKopi | null>(null);
+  let historikk = $state<VersjonSnapshot[]>([]);
+  let sammenlignVersjon = $state<VersjonSnapshot | null>(null);
+  let lagreModalApen = $state(false);
+  let lagreLabel = $state("");
+  let kladdTimer: any = null;
 
   // ── Tidsbasert forside ────────────────────────────────────────────────────────
   interface ForsideOppskrift { id: number; navn: string; tid: string | null; bilde: string | null }
@@ -547,6 +558,19 @@
       if (!opp) return;
       currentOppskrift = opp;
       portioner = opp.porsjoner ?? 4;
+      // Last kladd og historikk for aktiv profil
+      if (aktivProfil) {
+        const entry = await versjonerLast(aktivProfil.id, id);
+        kladd = entry?.kladd ?? null;
+        historikk = entry?.historikk ?? [];
+      } else {
+        kladd = null;
+        historikk = [];
+      }
+      redigerModus = false;
+      sammenlignVersjon = null;
+      lagreModalApen = false;
+      lagreLabel = "";
     } catch (err) {
       console.error("hent_oppskrift failed:", err);
     } finally {
@@ -557,6 +581,40 @@
     slåAvCookMode();
     currentOppskrift = null;
     portioner = null;
+    redigerModus = false;
+    kladd = null;
+    historikk = [];
+    sammenlignVersjon = null;
+    lagreModalApen = false;
+    lagreLabel = "";
+    if (kladdTimer) { clearTimeout(kladdTimer); kladdTimer = null; }
+  }
+
+  function åpneRediger() {
+    if (!currentOppskrift || !aktivProfil) return;
+    if (!kladd) kladd = kopiFraOppskrift(currentOppskrift);
+    redigerModus = true;
+  }
+
+  function avbrytRediger() {
+    redigerModus = false;
+    // Gjenopprett kladd fra store (ikke kast brukers lagrede kladd)
+    if (currentOppskrift && aktivProfil) {
+      versjonerLast(aktivProfil.id, currentOppskrift.id).then((entry) => {
+        kladd = entry?.kladd ?? null;
+      });
+    }
+  }
+
+  function oppdaterKladd(nyKopi: OppskriftKopi) {
+    kladd = nyKopi;
+    if (!currentOppskrift || !aktivProfil) return;
+    const profilId = aktivProfil.id;
+    const oppskriftId = currentOppskrift.id;
+    if (kladdTimer) clearTimeout(kladdTimer);
+    kladdTimer = setTimeout(() => {
+      kladd_sett(profilId, oppskriftId, nyKopi).catch(console.error);
+    }, 800);
   }
 
   async function toggleCookMode() {
@@ -1330,6 +1388,19 @@
     <div id="detail-panel">
       <div class="detail-topbar">
         <button class="btn-back" onclick={lukkDetalj}>← Tilbake</button>
+        {#if aktivProfil}
+          {#if redigerModus}
+            <button class="detail-rediger" onclick={avbrytRediger}>← Avbryt</button>
+            <button class="detail-rediger aktiv" onclick={() => lagreModalApen = true}>💾 Lagre versjon</button>
+          {:else}
+            <button
+              class="detail-rediger"
+              class:har-kladd={kladd !== null}
+              onclick={åpneRediger}
+              title={kladd !== null ? "Du har en redigert versjon" : "Rediger din kopi"}
+            >✏️ Rediger{kladd !== null ? " ●" : ""}</button>
+          {/if}
+        {/if}
         <button
           class="detail-fav"
           class:aktiv={favoritter.has(opp.id)}
@@ -1379,41 +1450,143 @@
           </div>
         </div>
 
-        <div class="detail-columns">
-          <div>
-            <div class="detail-section-title">Ingredienser</div>
-            {#each grupper as [g, ings]}
-              {#if multiGroup}<div class="ing-group-title">{g}</div>{/if}
-              {#each ings as i}
-                {@const m = fmtMengde(scaleMengde(i.mengde, origP, curP))}
-                <div class="ing-item">
-                  <span class="ing-mengde">{m}</span>
-                  <span class="ing-enhet">{i.enhet ?? ""}</span>
-                  <span class="ing-navn">{i.navn ?? ""}</span>
+        {#if redigerModus && kladd}
+          {@const k = kladd}
+          <div class="rediger-meta">
+            <label class="rediger-label">Navn
+              <input class="rediger-input" type="text" value={k.navn}
+                oninput={(e) => oppdaterKladd({ ...k, navn: (e.target as HTMLInputElement).value })} />
+            </label>
+            <label class="rediger-label">Beskrivelse
+              <textarea class="rediger-textarea" value={k.beskrivelse ?? ""}
+                oninput={(e) => oppdaterKladd({ ...k, beskrivelse: (e.target as HTMLTextAreaElement).value || null })}></textarea>
+            </label>
+            <div class="rediger-rad">
+              <label class="rediger-label">Porsjoner
+                <input class="rediger-input rediger-input-sm" type="number" min="1" value={k.porsjoner ?? ""}
+                  oninput={(e) => oppdaterKladd({ ...k, porsjoner: parseInt((e.target as HTMLInputElement).value) || null })} />
+              </label>
+              <label class="rediger-label">Tid
+                <input class="rediger-input rediger-input-sm" type="text" value={k.tid ?? ""}
+                  oninput={(e) => oppdaterKladd({ ...k, tid: (e.target as HTMLInputElement).value || null })} />
+              </label>
+            </div>
+          </div>
+
+          <div class="detail-columns">
+            <div>
+              <div class="detail-section-title">Ingredienser</div>
+              {#each k.ingredienser as ing, idx}
+                <div class="rediger-ing-rad">
+                  <input class="rediger-input rediger-input-mengde" type="number" placeholder="mengde"
+                    value={ing.mengde ?? ""}
+                    oninput={(e) => {
+                      const nyIng = [...k.ingredienser];
+                      nyIng[idx] = { ...ing, mengde: parseFloat((e.target as HTMLInputElement).value) || null };
+                      oppdaterKladd({ ...k, ingredienser: nyIng });
+                    }} />
+                  <input class="rediger-input rediger-input-enhet" type="text" placeholder="enhet"
+                    value={ing.enhet ?? ""}
+                    oninput={(e) => {
+                      const nyIng = [...k.ingredienser];
+                      nyIng[idx] = { ...ing, enhet: (e.target as HTMLInputElement).value || null };
+                      oppdaterKladd({ ...k, ingredienser: nyIng });
+                    }} />
+                  <input class="rediger-input rediger-input-navn" type="text" placeholder="ingrediens"
+                    value={ing.navn ?? ""}
+                    oninput={(e) => {
+                      const nyIng = [...k.ingredienser];
+                      nyIng[idx] = { ...ing, navn: (e.target as HTMLInputElement).value || null };
+                      oppdaterKladd({ ...k, ingredienser: nyIng });
+                    }} />
+                  <button class="rediger-slett" title="Slett ingrediens"
+                    onclick={() => {
+                      const nyIng = k.ingredienser.filter((_, i) => i !== idx);
+                      oppdaterKladd({ ...k, ingredienser: nyIng });
+                    }}>🗑</button>
                 </div>
               {/each}
-            {/each}
-          </div>
-          <div>
-            <div class="detail-section-title">Fremgangsmåte</div>
-            {#each opp.trinn as t, idx}
-              <div class="step-item">
-                <div class="step-num">{t.nummer ?? idx + 1}</div>
-                <div class="step-tekst">
-                  {#each trinnSegmenter(t.tekst) as s}
-                    {#if s.klikk}
-                      <button
-                        class="tid-knapp"
-                        title="Start timer ({fmtTid(s.sekunder)})"
-                        onclick={() => startTimer(s.sekunder, `${opp.navn} – trinn ${t.nummer ?? idx + 1}`)}
-                      >⏱ {s.tekst}</button>
-                    {:else}{s.tekst}{/if}
-                  {/each}
+              <button class="rediger-legg-til" onclick={() => {
+                const nyIng: KopiIngrediens = { gruppe: null, mengde: null, enhet: null, navn: null, sortering: k.ingredienser.length };
+                oppdaterKladd({ ...k, ingredienser: [...k.ingredienser, nyIng] });
+              }}>＋ Legg til ingrediens</button>
+            </div>
+
+            <div>
+              <div class="detail-section-title">Fremgangsmåte</div>
+              {#each k.trinn as trinn, idx}
+                <div class="rediger-trinn-rad">
+                  <div class="rediger-trinn-nr">{idx + 1}</div>
+                  <textarea class="rediger-textarea rediger-trinn-tekst" value={trinn.tekst}
+                    oninput={(e) => {
+                      const nyTrinn = [...k.trinn];
+                      nyTrinn[idx] = { ...trinn, tekst: (e.target as HTMLTextAreaElement).value };
+                      oppdaterKladd({ ...k, trinn: nyTrinn });
+                    }}></textarea>
+                  <div class="rediger-trinn-knapper">
+                    <button class="rediger-pil" disabled={idx === 0} title="Flytt opp"
+                      onclick={() => {
+                        const t = [...k.trinn];
+                        [t[idx - 1], t[idx]] = [t[idx], t[idx - 1]];
+                        oppdaterKladd({ ...k, trinn: t.map((x, i) => ({ ...x, nummer: i + 1 })) });
+                      }}>↑</button>
+                    <button class="rediger-pil" disabled={idx === k.trinn.length - 1} title="Flytt ned"
+                      onclick={() => {
+                        const t = [...k.trinn];
+                        [t[idx], t[idx + 1]] = [t[idx + 1], t[idx]];
+                        oppdaterKladd({ ...k, trinn: t.map((x, i) => ({ ...x, nummer: i + 1 })) });
+                      }}>↓</button>
+                    <button class="rediger-slett" title="Slett trinn"
+                      onclick={() => {
+                        const nyTrinn = k.trinn.filter((_, i) => i !== idx).map((x, i) => ({ ...x, nummer: i + 1 }));
+                        oppdaterKladd({ ...k, trinn: nyTrinn });
+                      }}>🗑</button>
+                  </div>
                 </div>
-              </div>
-            {/each}
+              {/each}
+              <button class="rediger-legg-til" onclick={() => {
+                const nyTrinn: KopiTrinn = { nummer: k.trinn.length + 1, tekst: "" };
+                oppdaterKladd({ ...k, trinn: [...k.trinn, nyTrinn] });
+              }}>＋ Legg til trinn</button>
+            </div>
           </div>
-        </div>
+        {:else}
+          <div class="detail-columns">
+            <div>
+              <div class="detail-section-title">Ingredienser</div>
+              {#each grupper as [g, ings]}
+                {#if multiGroup}<div class="ing-group-title">{g}</div>{/if}
+                {#each ings as i}
+                  {@const m = fmtMengde(scaleMengde(i.mengde, origP, curP))}
+                  <div class="ing-item">
+                    <span class="ing-mengde">{m}</span>
+                    <span class="ing-enhet">{i.enhet ?? ""}</span>
+                    <span class="ing-navn">{i.navn ?? ""}</span>
+                  </div>
+                {/each}
+              {/each}
+            </div>
+            <div>
+              <div class="detail-section-title">Fremgangsmåte</div>
+              {#each opp.trinn as t, idx}
+                <div class="step-item">
+                  <div class="step-num">{t.nummer ?? idx + 1}</div>
+                  <div class="step-tekst">
+                    {#each trinnSegmenter(t.tekst) as s}
+                      {#if s.klikk}
+                        <button
+                          class="tid-knapp"
+                          title="Start timer ({fmtTid(s.sekunder)})"
+                          onclick={() => startTimer(s.sekunder, `${opp.navn} – trinn ${t.nummer ?? idx + 1}`)}
+                        >⏱ {s.tekst}</button>
+                      {:else}{s.tekst}{/if}
+                    {/each}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        {/if}
 
         <div class="naering-wrap">
           {#if naeringPerPorsjon}
@@ -2181,4 +2354,49 @@
   /* ── Midjefilter ──────────────────────────────────────────── */
   .midjefilter-label { display: flex; align-items: center; gap: 8px; font-weight: normal; cursor: pointer; }
   .midjefilter-info { font-size: 0.8rem; color: var(--text-muted); margin: 2px 0 8px; }
+
+  /* ── Versjonering / redigering ── */
+  .detail-rediger {
+    font-size: 0.82rem; font-family: var(--font-ui);
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 10px; cursor: pointer;
+  }
+  .detail-rediger.aktiv { background: var(--card-hover); }
+  .detail-rediger.har-kladd { border-color: var(--text-muted); }
+  .rediger-meta { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  .rediger-rad { display: flex; gap: 16px; }
+  .rediger-label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: var(--text-muted); font-family: var(--font-ui); }
+  .rediger-input {
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 5px 8px; font-size: 0.9rem; font-family: var(--font-ui);
+    width: 100%;
+  }
+  .rediger-input-sm { width: 90px; }
+  .rediger-input-mengde { width: 64px; }
+  .rediger-input-enhet { width: 60px; }
+  .rediger-input-navn { flex: 1; }
+  .rediger-textarea {
+    background: var(--surface); color: var(--text);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 6px 8px; font-size: 0.9rem; font-family: var(--font-ui);
+    width: 100%; min-height: 56px; resize: vertical;
+  }
+  .rediger-ing-rad { display: flex; gap: 4px; align-items: center; margin-bottom: 4px; }
+  .rediger-slett { background: none; border: none; cursor: pointer; font-size: 1rem; padding: 2px 4px; color: var(--text-muted); }
+  .rediger-legg-til {
+    margin-top: 8px; font-size: 0.82rem; font-family: var(--font-ui);
+    background: none; border: 1px dashed var(--border); border-radius: var(--radius-sm);
+    color: var(--text-muted); padding: 4px 10px; cursor: pointer; width: 100%;
+  }
+  .rediger-trinn-rad { display: flex; gap: 6px; align-items: flex-start; margin-bottom: 8px; }
+  .rediger-trinn-nr { min-width: 24px; font-weight: 600; color: var(--text-muted); padding-top: 6px; }
+  .rediger-trinn-tekst { flex: 1; min-height: 72px; }
+  .rediger-trinn-knapper { display: flex; flex-direction: column; gap: 2px; }
+  .rediger-pil {
+    background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    cursor: pointer; font-size: 0.8rem; padding: 2px 6px; color: var(--text-muted);
+  }
+  .rediger-pil:disabled { opacity: 0.3; cursor: default; }
 </style>
