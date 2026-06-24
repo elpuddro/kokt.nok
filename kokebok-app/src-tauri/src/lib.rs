@@ -924,7 +924,7 @@ fn kandidater_for_slot(
         return vec![];
     }
 
-    // Bulk-hent kcal og porsjoner for alle kandidater i én query.
+    // Bulk-hent kcal, fett og porsjoner for alle kandidater i én query.
     let id_ph = basis.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
     let ids: Vec<i64> = basis.iter().map(|(id, _, _)| *id).collect();
     let id_refs: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
