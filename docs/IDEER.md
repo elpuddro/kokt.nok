@@ -33,12 +33,9 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
 
 ## 🔧 Løse tråder (ikke funksjoner)
 
-- **Rebygg portable med ny data:** `kokt-bundle.db` (innebygde bilder, brukt av
-  portable-bygget) har fortsatt 4444 matprat-oppskrifter, ikke de nye 5962.
-  Kjør `scripts/bygg_bundle_db.py` + rebygg binærene før neste distribusjon.
-  Merk: `bygg_bundle_db.py` bruker `shutil.copy2` av hele kokt.db, så den nye
-  `ingrediens_tagg`-tabellen (kosthold-filter) følger automatisk med — men
-  bundle-en MÅ rebygges for at filtrene skal virke i portable-distribusjonen.
+- **Portabel distribusjon er à jour** — bygget 2026-06-24 med alle features (#1–#22),
+  bilder komprimert til 400px/q75 (141 MB, ned fra 281 MB). Scrub-gate grønn.
+  Neste rebuild trengs kun ved nye features eller nye oppskrifter.
 
 ---
 
@@ -143,7 +140,7 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
    utvidelser: budsjett per uke, sesong-spesifikke retter (se #23 nedenfor).
 
 23. **Sesong- og høytidsspesifikke oppskriftsforslag** — forsiden (og evt.
-    matplanleggeren) fremhever retter knyttet til høytider og matdager: pinnekjøtt
+    matplanleggeren) fremhever retter knyttet til høytider og matdager:for eksempel pinnekjøtt
     og ribbe til jul, kalkun til Thanksgiving eller nyttårsaften, lam til påske, bidos til samisk
     nasjonaldag, jordbær og grillmat eller spekemat og rømmegrøt til sankthans, fårikål til fårikålens dag (siste tordag i
     sept.), valentinesmiddag, etc. Bygger på eksisterende temaer (#8) og tidsbasert
