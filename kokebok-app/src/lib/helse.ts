@@ -12,6 +12,8 @@ export interface Brukerprofil {
   vekt: number;
   aktivitet: Aktivitetsnivå;
   mål: Mål;
+  midje?: number;
+  midjeFilter: boolean;
 }
 
 export interface ProfilStore {
@@ -62,6 +64,11 @@ export function dagsbehov(p: Brukerprofil): Dagsbehov {
 export function dekningsProsent(næring: number, behov: number): number {
   if (!behov) return 0;
   return Math.round((næring / behov) * 100);
+}
+
+export function midjeOverGrenje(p: Brukerprofil): boolean {
+  if (!p.midjeFilter || p.midje == null) return false;
+  return p.kjønn === "mann" ? p.midje > 94 : p.midje > 80;
 }
 
 export async function profilLast(): Promise<ProfilStore> {
