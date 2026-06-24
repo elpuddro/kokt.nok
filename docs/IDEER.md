@@ -3,7 +3,7 @@
 Hver ny idé bør gjennom brainstorming → spec → plan før implementering
 (se `docs/superpowers/`).
 
-Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24.
+Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
 
 ---
 
@@ -107,7 +107,7 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24.
    `tid_til_min`-parser.
    Spec: `docs/superpowers/specs/2026-06-24-bedre-sok-design.md`.
 
-18. ~~**Oppskriftsversjonering («Git for mat»)**~~ — **Plan klar 2026-06-24.**
+~~18. **Oppskriftsversjonering («Git for mat»)**~~ — ✅ **FERDIG 2026-06-24.**
     Bruker redigerer personlig kopi av scraped oppskrift (ingredienser, trinn,
     navn, beskrivelse, porsjoner, tid), manuelt lagrer versjoner med label,
     sammenligner mot original (fargekodet to-kolonne diff) og gjenoppretter.
@@ -144,10 +144,10 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24.
 
 23. **Sesong- og høytidsspesifikke oppskriftsforslag** — forsiden (og evt.
     matplanleggeren) fremhever retter knyttet til høytider og matdager: pinnekjøtt
-    og ribbe til jul, kalkun til Thanksgiving, lam til påske, bidos til samisk
-    nasjonaldag, jordbær til sankthans, fårikål til fårikålens dag (siste tordag i
+    og ribbe til jul, kalkun til Thanksgiving eller nyttårsaften, lam til påske, bidos til samisk
+    nasjonaldag, jordbær og grillmat eller spekemat og rømmegrøt til sankthans, fårikål til fårikålens dag (siste tordag i
     sept.), valentinesmiddag, etc. Bygger på eksisterende temaer (#8) og tidsbasert
-    forside (#21) — ny «høytids-modus» der forsiden byttes til sesong-kurert liste
+    forside (#21) — der vi på spesifikke tider i året eller datoer bytter forsiden til sesong-kurert liste
     i stedet for tidspunktbasert. **Skjult kostnad:** manuell tagging av oppskrifter
     per høytid (kan gjøres med nøkkelord-regler på ingredienser/navn), eller en
     dedikert `hoytid`-kolonne i `kategorier`-tabellen. Lagt til 2026-06-24.
