@@ -146,3 +146,11 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     med Computus-påskeberegning. Ingen AI.
     Spec: `docs/superpowers/specs/2026-06-24-hoytid-sesong-design.md`.
     Plan: `docs/superpowers/plans/2026-06-24-hoytid-sesong.md`.
+
+~~24. **Høytidsdekorasjoner**~~ — ✅ **FERDIG 2026-06-25.**
+    Diskret, brukerstyrt SVG-pynt på forsidebannerets under aktive høytidsperioder.
+    Én dekorasjon per høytid (snøfnugg/egg/konfetti/flamme/spindelvev/hjerter), av som standard.
+    Toggle i Innstillinger → Temaer, grås ut utenom høytid. Inline SVG, ingen bildefiler.
+    Alkohol-holdige oppskrifter ekskludert permanent fra alle automatiske forslag.
+    Spec: `docs/superpowers/specs/2026-06-25-hoytidspynt-design.md`.
+    Plan: `docs/superpowers/plans/2026-06-25-hoytidspynt.md`.
