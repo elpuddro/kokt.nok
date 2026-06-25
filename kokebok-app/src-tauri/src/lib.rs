@@ -67,11 +67,14 @@ fn fts_ids_for_ord(conn: &Connection, ord: &str) -> Option<Vec<i64>> {
     }
 
     // Eksakt substring (FTS MATCH = alle trigrammer må matche)
+    // Wrap i doble anførelstegn så apostrof/bindestrek/OR/AND/NOT ikke trigger
+    // FTS5-parsefeil. Interne doble anførelstegn escapes som "".
+    let quoted = format!("\"{}\"", ord.replace('"', "\"\""));
     let exact_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ? LIMIT 2000";
     let ids = conn
         .prepare(exact_sql)
         .and_then(|mut s| {
-            s.query_map([ord], |r| r.get::<_, i64>(0))
+            s.query_map([quoted.as_str()], |r| r.get::<_, i64>(0))
                 .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
         })
         .unwrap_or_default();
@@ -82,15 +85,23 @@ fn fts_ids_for_ord(conn: &Connection, ord: &str) -> Option<Vec<i64>> {
 
     // Fuzzy fallback: OR av trigrammer
     let lower = ord.to_lowercase();
-    if lower.len() < 3 {
+    // Tell Unicode-tegn (ikke bytes) så ø/æ/å telles riktig.
+    if lower.chars().count() < 3 {
         return Some(vec![]); // for kort til trigram
     }
-    let trigrams: Vec<String> = lower
-        .as_bytes()
+    // Unicode-korrekte trigrammer (chars().windows(3)) i stedet for byte-windows
+    // som splitter flerbyte-tegn (ø=2 bytes, æ=2 bytes, å=2 bytes).
+    let chars: Vec<char> = lower.chars().collect();
+    let trigrams: Vec<String> = chars
         .windows(3)
-        .map(|w| String::from_utf8_lossy(w).into_owned())
+        .map(|w| w.iter().collect::<String>())
         .collect();
-    let expr = trigrams.join(" OR ");
+    // Wrap hvert trigram i doble anførelstegn for trygg FTS5-parsing.
+    let expr = trigrams
+        .iter()
+        .map(|tg| format!("\"{}\"", tg.replace('"', "\"\"")))
+        .collect::<Vec<_>>()
+        .join(" OR ");
 
     let fuzzy_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ? ORDER BY bm25(oppskrift_fts) LIMIT 200";
     let fuzzy_ids = conn
@@ -369,8 +380,6 @@ fn hent_oppskrifter(
             owned.push(k.clone());
         }
     }
-    // Lagrer FTS id-lister for hvert søkeord — eies her, referert av SQL-strengene i `fts_in_sqls`.
-    let mut fts_id_sets: Vec<Vec<i64>> = Vec::new();
     let mut fts_in_sqls: Vec<String> = Vec::new();
 
     if let Some(s) = sok.as_ref() {
@@ -393,7 +402,6 @@ fn hent_oppskrifter(
                     // Bygg IN-liste som streng (ID-er er heltall, ingen SQL-injeksjon)
                     let in_list: String = ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
                     fts_in_sqls.push(format!("o.id IN ({in_list})"));
-                    fts_id_sets.push(ids);
                 }
             }
             for s in &fts_in_sqls {
