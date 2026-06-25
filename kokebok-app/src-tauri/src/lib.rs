@@ -736,6 +736,8 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
             "SELECT o.id, o.navn, o.type, i.navn \
              FROM oppskrifter o JOIN ingredienser i ON i.oppskrift_id = o.id \
              WHERE i.navn IS NOT NULL AND i.navn != '' \
+             AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
+                             WHERE ai.oppskrift_id = o.id AND t.tagg = 'alkohol') \
              ORDER BY o.id",
         )
         .map_err(|e| e.to_string())?;
@@ -902,9 +904,12 @@ fn kandidater_for_slot(
         format!(" AND {}", diett_sql.join(" AND "))
     };
 
+    let alkohol_where = " AND NOT EXISTS (SELECT 1 FROM ingredienser ai \
+        JOIN ingrediens_tagg t ON t.navn = ai.navn \
+        WHERE ai.oppskrift_id = o.id AND t.tagg = 'alkohol')";
     let sql = format!(
         "SELECT o.id, o.navn, o.type, o.hoytid FROM oppskrifter o \
-         WHERE o.type IN ({kat_ph}){diett_where} LIMIT 400"
+         WHERE o.type IN ({kat_ph}){diett_where}{alkohol_where} LIMIT 400"
     );
     let refs: Vec<&dyn rusqlite::ToSql> =
         owned.iter().map(|s| s as &dyn rusqlite::ToSql).collect();
@@ -1385,6 +1390,8 @@ fn forside_oppskrifter(
     if let Some(ref h) = hoytid {
         let sql = "SELECT id, navn, tid, bilde FROM oppskrifter \
                    WHERE INSTR(',' || COALESCE(hoytid,'') || ',', ',' || ? || ',') > 0 \
+                   AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
+                       WHERE ai.oppskrift_id = oppskrifter.id AND t.tagg = 'alkohol') \
                    ORDER BY RANDOM() LIMIT 20";
         return conn.prepare(sql)
             .and_then(|mut stmt| {
@@ -1407,6 +1414,9 @@ fn forside_oppskrifter(
 
     let placeholders = typer.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
 
+    let alkohol_ekskluder = "AND NOT EXISTS (SELECT 1 FROM ingredienser ai \
+        JOIN ingrediens_tagg t ON t.navn = ai.navn \
+        WHERE ai.oppskrift_id = oppskrifter.id AND t.tagg = 'alkohol')";
     let sql = if nattFilter {
         format!(
             "SELECT id, navn, tid, bilde FROM oppskrifter \
@@ -1416,12 +1426,14 @@ fn forside_oppskrifter(
                  WHERE LOWER(tekst) LIKE '%ovn%' \
                     OR LOWER(tekst) LIKE '%stekepanne%' \
              ) \
+             {alkohol_ekskluder} \
              ORDER BY RANDOM() LIMIT 20"
         )
     } else {
         format!(
             "SELECT id, navn, tid, bilde FROM oppskrifter \
              WHERE type IN ({placeholders}) \
+             {alkohol_ekskluder} \
              ORDER BY RANDOM() LIMIT 20"
         )
     };
