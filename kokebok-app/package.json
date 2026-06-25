@@ -1,7 +1,7 @@
 {
-  "name": "kokebok-app",
-  "version": "0.1.0",
-  "description": "",
+  "name": "steike-bra",
+  "version": "1.0.0",
+  "description": "Steike bra — norsk oppskriftssamling",
   "type": "module",
   "scripts": {
     "dev": "vite dev",

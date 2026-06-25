@@ -1304,7 +1304,7 @@ fn about_info() -> AboutInfo {
         navn: "Frank Simonsen",
         epost: "elpuddro@gmail.com",
         versjon: env!("CARGO_PKG_VERSION"),
-        beskrivelse: "Kokebok er en offline basert oppskriftssamling for Windows og Linux. \
+        beskrivelse: "Steike bra er en offline oppskriftssamling for Windows og Linux. \
             Appen inneholder over 5 900 norske oppskrifter fra matprat.no og godt.no, \
             med næringsinfo fra Matvaretabellen, smarte funksjoner som ukesmenyplanlegger, \
             handleliste, kjøleskapsstyring og kostholdsfiltre med mere.",

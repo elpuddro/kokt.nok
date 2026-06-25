@@ -1,8 +1,8 @@
 [package]
 name = "kokebok-app"
 version = "1.0.0"
-description = "Kokebok"
-authors = ["Kokebok"]
+description = "Steike bra"
+authors = ["Frank Simonsen"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

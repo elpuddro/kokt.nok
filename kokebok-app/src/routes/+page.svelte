@@ -911,7 +911,7 @@
 <aside id="sidebar">
   <div class="sidebar-logo">
     <span class="logo-icon">🍳</span>
-    <span class="logo-text">Kokebok</span>
+    <span class="logo-text">Steike bra</span>
   </div>
 
   <div class="profil-velger">
