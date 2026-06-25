@@ -7,7 +7,7 @@
     handlelisteLast, handlelisteLeggTil, handlelisteFjern,
     handlelisteSettPorsjoner, handlelisteTøm, type HandlelistePost,
   } from "$lib/handleliste";
-  import { temaLast, temaSett, aktivtTema, gjeldendeTema, TEMAER, type TemaId, type Lagret } from "$lib/tema";
+  import { temaLast, temaSett, gjeldendeTema, erGyldigTema, TEMAER, type TemaId, type Lagret } from "$lib/tema";
   import { notaterLast, notatSett } from "$lib/notater";
   import { diettLast, diettSett, DIETT_FILTRE } from "$lib/diett";
   import { lagerLast, lagerLeggTil, lagerFjern, lagerTøm, type LagerVare } from "$lib/lager";
@@ -489,6 +489,14 @@
     if (fjernet.length > 0) alert(`Fjernet fra kjøleskapet: ${fjernet.join(", ")}`);
   }
 
+  // Returner effektivt tema: manuell → direkte; auto → OS-mørkt gir "dark",
+  // ellers dato-basert sesong/høytid.
+  function effektivtTema(lagret: Lagret): TemaId {
+    if (lagret.modus === "manuell" && erGyldigTema(lagret.tema)) return lagret.tema;
+    if (window.matchMedia("(prefers-color-scheme: dark)").matches) return "dark";
+    return gjeldendeTema(new Date());
+  }
+
   function applyTema(id: TemaId) {
     aktivtTemaId = id;
     const el = document.documentElement;
@@ -496,9 +504,14 @@
     else el.setAttribute("data-tema", id);
   }
 
+  let darkModeQuery: MediaQueryList | null = null;
+  function onDarkModeChange() {
+    if (temaValg.modus === "auto") applyTema(effektivtTema(temaValg));
+  }
+
   async function velgTemaAuto() {
     temaValg = await temaSett("auto", null);
-    applyTema(aktivtTema(temaValg, new Date()));
+    applyTema(effektivtTema(temaValg));
   }
 
   async function velgTemaManuell(id: TemaId) {
@@ -853,7 +866,12 @@
     favoritter = await favorittLast();
     handleliste = await handlelisteLast();
     temaValg = await temaLast();
-    applyTema(aktivtTema(temaValg, new Date()));
+    applyTema(effektivtTema(temaValg));
+
+    // Lytt på OS-tema-endringer (f.eks. systemet bytter til mørkt om kvelden).
+    // Bare aktuelt i auto-modus — manuell overstyring er uberørt.
+    darkModeQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    darkModeQuery.addEventListener("change", onDarkModeChange);
     notater = await notaterLast();
     aktiveDietter = await diettLast();
     lager = await lagerLast();
@@ -884,6 +902,7 @@
   onDestroy(() => {
     slåAvCookMode();
     if (timerTikk) clearInterval(timerTikk);
+    darkModeQuery?.removeEventListener("change", onDarkModeChange);
   });
 </script>
 

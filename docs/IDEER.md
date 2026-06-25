@@ -188,9 +188,9 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     `priser`-tabellens `oppdatert`-felt. Enkelt linjediagram (SVG) i en ny
     «Priser»-visning. Gir brukeren oversikt over mat-inflasjon. **Ikke startet.**
 
-31. **Porsjons-kalkulator i Cook Mode** — juster porsjoner direkte i Cook Mode
-    (slider/spinner), og se ingrediensmengder oppdatert live uten å gå ut av
-    visningen. I dag må man gå til detaljvisning og tilbake. **Ikke startet.**
+~~31. **Porsjons-kalkulator i Cook Mode**~~ — ✅ **ALLEREDE IMPLEMENTERT.**
+    Porsjons-raden (−/+) er alltid synlig i detaljvisningen, som er samme view
+    som Cook Mode bruker. Ingen endring nødvendig.
 
 32. **Oppskrift-samlinger / «kokebok»** — brukeren kan lage navngitte samlinger
     (f.eks. «Julemiddag 2026», «Treningsmat», «Barnas favoritter») og legge
@@ -201,9 +201,10 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     oppskrifter side-om-side. Nyttig for å velge sunneste alternativ. Bygger
     på eksisterende næringsbereging i `hent_oppskrift`. **Ikke startet.**
 
-34. **Mørk modus auto-bytte** — følg OS-systeminnstillingen (prefers-color-scheme)
-    automatisk i stedet for manuell temavalg, med mulighet til å overstyre.
-    Minimal CSS-endring, stor praktisk verdi spesielt på Android. **Ikke startet.**
+~~34. **Mørk modus auto-bytte**~~ — ✅ **FERDIG 2026-06-25.** Auto-modus følger nå
+    OS `prefers-color-scheme: dark` og bruker `"dark"`-temaet automatisk. Manuell
+    overstyring uberørt. `matchMedia`-lytter for live-bytte (f.eks. systemet bytter
+    om kvelden). `effektivtTema()`-hjelpefunksjon i `+page.svelte`.
 
 35. **Offline oppdateringssjekk** (kun åpen/GitHub-utgave, ikke fengselsutgaven) —
     varsle brukeren diskret når en ny versjon er tilgjengelig på GitHub Releases,
