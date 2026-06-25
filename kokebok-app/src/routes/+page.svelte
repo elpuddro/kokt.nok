@@ -17,6 +17,7 @@
   import { profilLast, profilSettAktiv, profilOpprett, profilOppdater, profilSlett, tdee, dagsbehov, dekningsProsent, midjeOverGrenje, type Brukerprofil, type ProfilStore } from "$lib/helse";
   import { versjonerLast, kladd_sett, kladd_fjern, versjon_lagre, versjon_slett } from "$lib/versjoner";
   import { kopiFraOppskrift, beregnDiff, type OppskriftKopi, type KopiIngrediens, type KopiTrinn, type VersjonSnapshot } from "$lib/versjoner-logikk";
+  import Hoytidspynt from "$lib/Hoytidspynt.svelte";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -95,6 +96,7 @@
   let forsideTittel = $state("");
 
   let aktivHoytid = $state<string | null>(null);
+  let pynt = $state(false);
 
   const HOYTID_BANNER: Record<string, string> = {
     jul:       "🎄 Juleoppskrifter",
@@ -400,6 +402,12 @@
   async function onPlanSesongChange() {
     const store = await load("plan.json");
     await store.set("sesong", planSesong);
+    await store.save();
+  }
+
+  async function onPyntChange() {
+    const store = await load("innstillinger.json");
+    await store.set("pynt", pynt);
     await store.save();
   }
 
@@ -868,6 +876,8 @@
       aboutInfo = null;
     }
     aktivHoytid = await invoke<string | null>("hoytid_aktiv");
+    const innstStore = await load("innstillinger.json");
+    pynt = (await innstStore.get<boolean>("pynt")) ?? false;
     await lastForside();
   });
 
@@ -1122,6 +1132,15 @@
             <span>{t.navn}</span>
           </label>
         {/each}
+        <label class="tema-valg pynt-toggle {!aktivHoytid ? 'deaktivert' : ''}">
+          <input
+            type="checkbox"
+            checked={pynt}
+            disabled={!aktivHoytid}
+            onchange={() => { pynt = !pynt; onPyntChange(); }}
+          />
+          <span>Høytidspynt {aktivHoytid ? '' : '(ingen aktiv høytid)'}</span>
+        </label>
       </details>
       {/if}
       {#if innstFane === "diett"}
@@ -1377,10 +1396,13 @@
   <div id="grid-wrap">
     {#if currentKategori === "alle" && !sok && forsideOppskrifter.length > 0}
       <div class="forside-wrap">
-        <div class="forside-header">
+        <div class="forside-header" style="position:relative;">
           <h2 class="forside-tittel">{forsideTittel}</h2>
           {#if !aktivHoytid}
             <p class="forside-undertekst">Forslag til deg akkurat nå</p>
+          {/if}
+          {#if pynt && aktivHoytid}
+            <Hoytidspynt hoytid={aktivHoytid} />
           {/if}
         </div>
         <div class="forside-grid">
@@ -2714,4 +2736,6 @@
   .plan-toggle { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-muted); cursor: pointer; }
   .plan-toggle input { width: auto; }
   .plan-toggle.deaktivert { opacity: 0.4; cursor: not-allowed; }
+  .pynt-toggle { margin-top: 10px; border-top: 1px solid var(--border-light); padding-top: 10px; }
+  .pynt-toggle.deaktivert { opacity: 0.4; cursor: not-allowed; }
 </style>
