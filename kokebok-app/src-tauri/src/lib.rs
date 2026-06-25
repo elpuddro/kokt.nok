@@ -50,6 +50,60 @@ fn open(app: &AppHandle) -> Result<Connection, String> {
         .map_err(|e| format!("Klarte ikke åpne database: {e}"))
 }
 
+/// Søk i FTS5-tabellen for ett ord.
+/// Prøver eksakt MATCH først. Hvis 0 treff, prøver OR-av-trigrammer (fuzzy).
+/// Returnerer None hvis FTS-tabellen ikke finnes (fallback til LIKE).
+fn fts_ids_for_ord(conn: &Connection, ord: &str) -> Option<Vec<i64>> {
+    // Sjekk om tabellen finnes
+    let exists: bool = conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='oppskrift_fts'",
+            [],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap_or(0) > 0;
+    if !exists {
+        return None;
+    }
+
+    // Eksakt substring (FTS MATCH = alle trigrammer må matche)
+    let exact_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ? LIMIT 2000";
+    let ids = conn
+        .prepare(exact_sql)
+        .and_then(|mut s| {
+            s.query_map([ord], |r| r.get::<_, i64>(0))
+                .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
+        })
+        .unwrap_or_default();
+
+    if !ids.is_empty() {
+        return Some(ids);
+    }
+
+    // Fuzzy fallback: OR av trigrammer
+    let lower = ord.to_lowercase();
+    if lower.len() < 3 {
+        return Some(vec![]); // for kort til trigram
+    }
+    let trigrams: Vec<String> = lower
+        .as_bytes()
+        .windows(3)
+        .map(|w| String::from_utf8_lossy(w).into_owned())
+        .collect();
+    let expr = trigrams.join(" OR ");
+
+    let fuzzy_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ? ORDER BY bm25(oppskrift_fts) LIMIT 200";
+    let fuzzy_ids = conn
+        .prepare(fuzzy_sql)
+        .and_then(|mut s| {
+            s.query_map([expr.as_str()], |r| r.get::<_, i64>(0))
+                .and_then(|rows| rows.collect::<rusqlite::Result<Vec<_>>>())
+        })
+        .unwrap_or_default();
+
+    Some(fuzzy_ids)
+}
+
 // Kjør en SELECT og returner rader som JSON-objekter (kolonnenavn → verdi).
 fn query_json(
     conn: &Connection,
@@ -315,15 +369,47 @@ fn hent_oppskrifter(
             owned.push(k.clone());
         }
     }
+    // Lagrer FTS id-lister for hvert søkeord — eies her, referert av SQL-strengene i `fts_in_sqls`.
+    let mut fts_id_sets: Vec<Vec<i64>> = Vec::new();
+    let mut fts_in_sqls: Vec<String> = Vec::new();
+
     if let Some(s) = sok.as_ref() {
+        let mut use_fts = true;
+        let mut temp_id_sets: Vec<Vec<i64>> = Vec::new();
+
         for ord in s.split_whitespace().take(5) {
-            let like = format!("%{ord}%");
-            owned.push(like.clone());
-            owned.push(like);
-            conds.push(
-                "(o.navn LIKE ? OR EXISTS (SELECT 1 FROM ingredienser i \
-                 WHERE i.oppskrift_id = o.id AND i.navn LIKE ?))",
-            );
+            match fts_ids_for_ord(&conn, ord) {
+                Some(ids) => temp_id_sets.push(ids),
+                None => { use_fts = false; break; }
+            }
+        }
+
+        if use_fts {
+            for ids in temp_id_sets {
+                if ids.is_empty() {
+                    // Ingen treff for dette ordet — hele søket gir 0 rader
+                    conds.push("1=0");
+                } else {
+                    // Bygg IN-liste som streng (ID-er er heltall, ingen SQL-injeksjon)
+                    let in_list: String = ids.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(",");
+                    fts_in_sqls.push(format!("o.id IN ({in_list})"));
+                    fts_id_sets.push(ids);
+                }
+            }
+            for s in &fts_in_sqls {
+                conds.push(s.as_str());
+            }
+        } else {
+            // Fallback til LIKE (FTS-tabell finnes ikke)
+            for ord in s.split_whitespace().take(5) {
+                let like = format!("%{ord}%");
+                owned.push(like.clone());
+                owned.push(like);
+                conds.push(
+                    "(o.navn LIKE ? OR EXISTS (SELECT 1 FROM ingredienser i \
+                     WHERE i.oppskrift_id = o.id AND i.navn LIKE ?))",
+                );
+            }
         }
     }
 
