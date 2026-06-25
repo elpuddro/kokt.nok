@@ -70,7 +70,7 @@ fn fts_ids_for_ord(conn: &Connection, ord: &str) -> Option<Vec<i64>> {
     // Wrap i doble anførelstegn så apostrof/bindestrek/OR/AND/NOT ikke trigger
     // FTS5-parsefeil. Interne doble anførelstegn escapes som "".
     let quoted = format!("\"{}\"", ord.replace('"', "\"\""));
-    let exact_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ? LIMIT 2000";
+    let exact_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ?";
     let ids = conn
         .prepare(exact_sql)
         .and_then(|mut s| {
@@ -87,7 +87,7 @@ fn fts_ids_for_ord(conn: &Connection, ord: &str) -> Option<Vec<i64>> {
     let lower = ord.to_lowercase();
     // Tell Unicode-tegn (ikke bytes) så ø/æ/å telles riktig.
     if lower.chars().count() < 3 {
-        return Some(vec![]); // for kort til trigram
+        return None; // for kort til FTS-trigram — kaller bruker LIKE-fallback
     }
     // Unicode-korrekte trigrammer (chars().windows(3)) i stedet for byte-windows
     // som splitter flerbyte-tegn (ø=2 bytes, æ=2 bytes, å=2 bytes).
@@ -103,7 +103,7 @@ fn fts_ids_for_ord(conn: &Connection, ord: &str) -> Option<Vec<i64>> {
         .collect::<Vec<_>>()
         .join(" OR ");
 
-    let fuzzy_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ? ORDER BY bm25(oppskrift_fts) LIMIT 200";
+    let fuzzy_sql = "SELECT rowid FROM oppskrift_fts WHERE oppskrift_fts MATCH ? ORDER BY bm25(oppskrift_fts)";
     let fuzzy_ids = conn
         .prepare(fuzzy_sql)
         .and_then(|mut s| {
