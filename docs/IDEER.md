@@ -165,14 +165,17 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     for Cook Mode. UI-tilpasning for berøring og portrait/landscape.
     Spec: `docs/superpowers/specs/2026-06-25-android-tablet-design.md`. **Ikke startet.**
 
-26. **DB-indeksoptimalisering** — sjekk hvilke indekser som faktisk finnes i `kokt.db`
-    (`sqlite_master`) og legg til manglende på `ingredienser.oppskrift_id`,
-    `ingredienser.navn`, `ingrediens_tagg.navn`, `naering.ingredient_navn`,
-    `priser.ingredient_navn`. Verifiser med `EXPLAIN QUERY PLAN`. **Ikke startet.**
+~~26. **DB-indeksoptimalisering**~~ — ✅ **FERDIG 2026-06-25.**
+    Lagt til `idx_kat_kategori` på `kategorier(kategori)` og
+    `idx_opp_hoytid` partial index på `oppskrifter(hoytid) WHERE hoytid IS NOT NULL`.
+    Byttet `INSTR`→`LIKE`-query i `forside_oppskrifter` (22× speedup).
+    Skript: `scripts/legg_til_indekser.py`.
 
-27. **Fuzzy-søk (FTS5 trigram)** — SQLite FTS5 med trigram-tokenizer fanger
-    stavefeil («spageti» → «spaghetti»). Bygger på eksisterende AND-søk (#5).
-    Ingen ekstern avhengighet. **Ikke startet.**
+~~27. **Fuzzy-søk (FTS5 trigram)**~~ — ✅ **FERDIG 2026-06-25.**
+    `oppskrift_fts` contentless FTS5 trigram-tabell i `kokt.db`.
+    Eksakt substring-søk først; OR-trigram fuzzy-fallback ved 0 treff.
+    58× raskere enn LIKE (0.2ms vs 11.6ms). Fanger 1–2 bokstavs-avvik.
+    Skript: `scripts/bygg_fts.py`. Rust: `fts_ids_for_ord()` i `lib.rs`.
 
 28. **Oppskrift-deling** (kun Android/åpen utgave, ikke fengselsutgaven) — eksporter
     én oppskrift som formatert tekst/PDF og åpne Android share-sheet via

@@ -10,6 +10,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
+# Forutsetning: scripts/legg_til_indekser.py og scripts/bygg_fts.py
+# må ha vært kjørt på kokt.db før dette skriptet.
+# FTS5-tabellen (oppskrift_fts) kopieres automatisk med i bundle.
+
 DATA = Path(__file__).resolve().parent.parent / "kokebok-app" / "src-tauri" / "data"
 KILDE = DATA / "kokt.db"
 BUNDLE = DATA / "kokt-bundle.db"
