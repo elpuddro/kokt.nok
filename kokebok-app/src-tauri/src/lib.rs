@@ -8,8 +8,10 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
-// ─── DB-tilkobling ────────────────────────────────────────────────────────────
-fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
+// ─── DB-sti (løses én gang ved oppstart, caches i managed state) ──────────────
+struct DbPath(PathBuf);
+
+fn resolve_db_path(app: &AppHandle) -> Result<PathBuf, String> {
     // Portabel modus: kokt.db ligger ved siden av selve exe-en. Prøves først så
     // en portabel mappe (exe + kokt.db) vinner over en evt. resource-pakket DB.
     if let Ok(exe) = std::env::current_exe() {
@@ -43,8 +45,8 @@ fn db_path(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn open(app: &AppHandle) -> Result<Connection, String> {
-    let p = db_path(app)?;
-    Connection::open_with_flags(&p, OpenFlags::SQLITE_OPEN_READ_ONLY)
+    let path = app.state::<DbPath>();
+    Connection::open_with_flags(&path.0, OpenFlags::SQLITE_OPEN_READ_ONLY)
         .map_err(|e| format!("Klarte ikke åpne database: {e}"))
 }
 
@@ -122,22 +124,12 @@ fn kjott_fisk_kategorier() -> &'static [&'static str] {
 // betingelses-SQL til `sql_ut` (eies av kaller) og tagg-parametre til `owned`.
 // `alias` er oppskrift-tabellens alias i ytre spørring (f.eks. "o" eller "").
 fn bygg_diett_filter(
-    conn: &Connection,
+    _conn: &Connection,
     dietter: &Option<Vec<String>>,
     opp_ref: &str,
     sql_ut: &mut Vec<String>,
     owned: &mut Vec<String>,
 ) {
-    let har_tabell: bool = conn
-        .query_row(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ingrediens_tagg'",
-            [],
-            |_| Ok(true),
-        )
-        .unwrap_or(false);
-    if !har_tabell {
-        return;
-    }
     if let Some(ds) = dietter.as_ref() {
         for id in ds {
             let tagger = tagger_for(id);
@@ -275,6 +267,7 @@ struct ListeSvar {
     per_side: i64,
 }
 
+#[allow(dead_code)]
 fn tid_til_min(s: &str) -> Option<i64> {
     let s = s.trim().to_lowercase();
     // "X time(r) Y min"
@@ -359,51 +352,37 @@ fn hent_oppskrifter(
 
     let sorter_str = sorter.as_deref().unwrap_or("navn_asc");
 
-    let oppskrifter = if sorter_str == "tid_asc" || sorter_str == "tid_desc" {
-        // Tidssortering: hent alle filtrerte rader, sorter i Rust, paginer manuelt.
-        let alle_sql = format!(
-            "SELECT o.id, o.slug, o.navn, o.type, o.porsjoner, o.tid, o.bilde
-             FROM   oppskrifter o {where_sql}"
-        );
-        let mut rader: Vec<serde_json::Value> =
-            query_json(&conn, &alle_sql, filter_refs.as_slice())?;
+    // Tidssortering i SQL via CASE-uttrykk — unngår å laste alle rader i minne.
+    // Mønsteret "X timer Y min" → minutter beregnes med strengoperasjoner SQLite
+    // støtter. Ukjent format → NULL, sorteres sist (NULLS LAST).
+    let tid_expr = "CASE \
+        WHEN o.tid LIKE '%timer%' AND o.tid LIKE '%min%' THEN \
+            CAST(TRIM(SUBSTR(o.tid, 1, INSTR(o.tid,'timer')-1)) AS INTEGER)*60 + \
+            CAST(TRIM(REPLACE(REPLACE(SUBSTR(o.tid,INSTR(o.tid,'timer')+5),'min',''),' ','')) AS INTEGER) \
+        WHEN o.tid LIKE '%time %min%' THEN \
+            CAST(TRIM(SUBSTR(o.tid, 1, INSTR(o.tid,'time')-1)) AS INTEGER)*60 + \
+            CAST(TRIM(REPLACE(REPLACE(SUBSTR(o.tid,INSTR(o.tid,'time')+4),'min',''),' ','')) AS INTEGER) \
+        WHEN o.tid LIKE '%timer' THEN CAST(TRIM(REPLACE(o.tid,'timer','')) AS INTEGER)*60 \
+        WHEN o.tid LIKE '%time'  THEN CAST(TRIM(REPLACE(o.tid,'time',''))  AS INTEGER)*60 \
+        WHEN o.tid LIKE '%min'   THEN CAST(TRIM(REPLACE(o.tid,'min',''))   AS INTEGER) \
+        ELSE NULL END";
 
-        rader.sort_by(|a, b| {
-            let ta = a["tid"].as_str().and_then(tid_til_min);
-            let tb = b["tid"].as_str().and_then(tid_til_min);
-            let by_tid = match (ta, tb) {
-                (Some(x), Some(y)) => if sorter_str == "tid_asc" { x.cmp(&y) } else { y.cmp(&x) },
-                (Some(_), None) => std::cmp::Ordering::Less,
-                (None, Some(_)) => std::cmp::Ordering::Greater,
-                (None, None) => std::cmp::Ordering::Equal,
-            };
-            by_tid.then_with(|| {
-                let na = a["navn"].as_str().unwrap_or("").to_lowercase();
-                let nb = b["navn"].as_str().unwrap_or("").to_lowercase();
-                na.cmp(&nb)
-            })
-        });
-
-        rader.into_iter()
-            .skip(offset as usize)
-            .take(per_side as usize)
-            .collect()
-    } else {
-        let order = match sorter_str {
-            "navn_desc" => "o.navn COLLATE NOCASE DESC",
-            _           => "o.navn COLLATE NOCASE ASC",
-        };
-        let list_sql = format!(
-            "SELECT o.id, o.slug, o.navn, o.type, o.porsjoner, o.tid, o.bilde
-             FROM   oppskrifter o {where_sql}
-             ORDER  BY {order}
-             LIMIT  ? OFFSET ?"
-        );
-        let mut list_refs: Vec<&dyn rusqlite::ToSql> = filter_refs.clone();
-        list_refs.push(&per_side);
-        list_refs.push(&offset);
-        query_json(&conn, &list_sql, list_refs.as_slice())?
+    let order = match sorter_str {
+        "tid_asc"  => format!("{tid_expr} ASC NULLS LAST, o.navn COLLATE NOCASE ASC"),
+        "tid_desc" => format!("{tid_expr} DESC NULLS LAST, o.navn COLLATE NOCASE ASC"),
+        "navn_desc" => "o.navn COLLATE NOCASE DESC".to_string(),
+        _           => "o.navn COLLATE NOCASE ASC".to_string(),
     };
+    let list_sql = format!(
+        "SELECT o.id, o.slug, o.navn, o.type, o.porsjoner, o.tid, o.bilde
+         FROM   oppskrifter o {where_sql}
+         ORDER  BY {order}
+         LIMIT  ? OFFSET ?"
+    );
+    let mut list_refs: Vec<&dyn rusqlite::ToSql> = filter_refs.clone();
+    list_refs.push(&per_side);
+    list_refs.push(&offset);
+    let oppskrifter = query_json(&conn, &list_sql, list_refs.as_slice())?;
 
     Ok(ListeSvar {
         total,
@@ -621,6 +600,7 @@ fn hent_oppskrifter_by_ids(app: AppHandle, ids: Vec<i64>) -> Result<Vec<Value>, 
 
 // ─── Bildebytes: DB-BLOB (release) med fil-fallback (dev) ──────────────────────
 fn bilde_bytes(app: &AppHandle, id: i64) -> Option<Vec<u8>> {
+    // open() bruker nå cached DbPath — ingen resolve_db_path() per request.
     let conn = open(app).ok()?;
 
     // Prøv BLOB fra DB. Kolonnen bilde_data finnes bare i den genererte
@@ -769,7 +749,8 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
                 } else {
                     mangler.clear();
                 }
-                totalt = 0; dekket = 0;
+                #[allow(unused_assignments)]
+                { totalt = 0; dekket = 0; }
             }
         };
     }
@@ -1458,7 +1439,13 @@ fn forside_oppskrifter(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .manage(CookModeState::default())
+        .setup(|app| {
+            let path = resolve_db_path(&app.handle())
+                .expect("kokt.db ikke funnet ved oppstart");
+            app.manage(DbPath(path));
+            app.manage(CookModeState::default());
+            Ok(())
+        })
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .register_uri_scheme_protocol("kbilde", |ctx, request| {
