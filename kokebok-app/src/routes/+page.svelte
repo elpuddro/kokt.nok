@@ -62,6 +62,7 @@
   let planDagsmaal = $state(2000);
   let planPersoner = $state(2);
   let planLaster = $state(false);
+  let planSesong = $state(false);
   let profilStore = $state<ProfilStore>({ profiler: [], aktivId: null });
   let profilDropdownÅpen = $state(false);
   let profilSkjemaÅpent = $state(false);
@@ -92,6 +93,18 @@
 
   let forsideOppskrifter = $state<ForsideOppskrift[]>([]);
   let forsideTittel = $state("");
+
+  let aktivHoytid = $state<string | null>(null);
+
+  const HOYTID_BANNER: Record<string, string> = {
+    jul:       "🎄 Juleoppskrifter",
+    paske:     "🐣 Påskeoppskrifter",
+    mai17:     "🇳🇴 17. mai-mat",
+    sankthans: "🔥 Sankthansmat",
+    farikaal:  "🍲 Fårikålens dag",
+    halloween: "🎃 Halloweenmat",
+    valentins: "❤️ Valentinsmiddag",
+  };
 
   let cookModeAktiv = $state(false);
   type Timer = { id: number; navn: string; igjen: number; total: number; ferdig: boolean; pauset: boolean };
@@ -332,14 +345,24 @@
   }
 
   async function lastForside() {
-    const sone = nåværendeTidssone();
-    forsideTittel = sone.tittel;
-    const t = new Date().getHours();
-    const nattFilter = (t >= 22 || t < 6) && aboutInfo === null;
-    forsideOppskrifter = await invoke<ForsideOppskrift[]>("forside_oppskrifter", {
-      typer: sone.typer,
-      nattFilter,
-    });
+    if (aktivHoytid) {
+      forsideTittel = HOYTID_BANNER[aktivHoytid] ?? "Sesongmat";
+      forsideOppskrifter = await invoke<ForsideOppskrift[]>("forside_oppskrifter", {
+        typer: [],
+        nattFilter: false,
+        hoytid: aktivHoytid,
+      });
+    } else {
+      const sone = nåværendeTidssone();
+      forsideTittel = sone.tittel;
+      const t = new Date().getHours();
+      const nattFilter = (t >= 22 || t < 6) && aboutInfo === null;
+      forsideOppskrifter = await invoke<ForsideOppskrift[]>("forside_oppskrifter", {
+        typer: sone.typer,
+        nattFilter,
+        hoytid: null,
+      });
+    }
   }
 
   type LaastSlot = { dag: number; slot: string; id: number };
@@ -364,6 +387,7 @@
         dietter: aktiveDietter,
         laaste: samleLaaste(),
         sunnPlan: aktivtMidjeFilter,
+        hoytid: planSesong && aktivHoytid ? aktivHoytid : null,
       });
       plan = uke;
     } catch (e) {
@@ -371,6 +395,12 @@
     } finally {
       planLaster = false;
     }
+  }
+
+  async function onPlanSesongChange() {
+    const store = await load("plan.json");
+    await store.set("sesong", planSesong);
+    await store.save();
   }
 
   function toggleLaas(dag: number, slot: string) {
@@ -823,6 +853,8 @@
     kategorier = await invoke("get_kategorier", { dietter: aktiveDietter });
     const sorterStore = await load("sorter.json");
     sorter = (await sorterStore.get<string>("sorter")) ?? "navn_asc";
+    const planStore = await load("plan.json");
+    planSesong = (await planStore.get<boolean>("sesong")) ?? false;
     await fetchGrid();
     profilStore = await profilLast();
     if (profilStore.aktivId) {
@@ -835,6 +867,7 @@
       // fengselsbygg — about ikke tilgjengelig
       aboutInfo = null;
     }
+    aktivHoytid = await invoke<string | null>("hoytid_aktiv");
     await lastForside();
   });
 
@@ -1283,6 +1316,12 @@
         {#if aktiveDietter.length > 0}
           <span class="plan-filter-merke">🍽️ {aktiveDietter.length} filtre aktive</span>
         {/if}
+        <label class="plan-toggle {!aktivHoytid ? 'deaktivert' : ''}">
+          <input type="checkbox" bind:checked={planSesong}
+                 disabled={!aktivHoytid}
+                 onchange={onPlanSesongChange} />
+          Sesongmeny
+        </label>
         <button class="plan-generer" onclick={genererPlan} disabled={planLaster}>
           {planLaster ? "Genererer…" : "↻ Generer"}
         </button>
@@ -1340,7 +1379,9 @@
       <div class="forside-wrap">
         <div class="forside-header">
           <h2 class="forside-tittel">{forsideTittel}</h2>
-          <p class="forside-undertekst">Forslag til deg akkurat nå</p>
+          {#if !aktivHoytid}
+            <p class="forside-undertekst">Forslag til deg akkurat nå</p>
+          {/if}
         </div>
         <div class="forside-grid">
           {#each forsideOppskrifter as o (o.id)}
@@ -2670,4 +2711,7 @@
   .sammenlign-orig { color: var(--text-muted); }
   .sammenlign-versjon { color: var(--text); }
   .sammenlign-tom { color: var(--text-muted); font-style: italic; }
+  .plan-toggle { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 0.82rem; color: var(--text-muted); cursor: pointer; }
+  .plan-toggle input { width: auto; }
+  .plan-toggle.deaktivert { opacity: 0.4; cursor: not-allowed; }
 </style>
