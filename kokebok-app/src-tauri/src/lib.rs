@@ -1370,7 +1370,7 @@ fn forside_oppskrifter(
     // Høytidsmodus: ignorer typer/nattFilter, filtrer på høytid-kolonne
     if let Some(ref h) = hoytid {
         let sql = "SELECT id, navn, tid, bilde FROM oppskrifter \
-                   WHERE INSTR(',' || COALESCE(hoytid,'') || ',', ',' || ? || ',') > 0 \
+                   WHERE hoytid IS NOT NULL AND (',' || hoytid || ',') LIKE ('%,' || ? || ',%') \
                    AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
                        WHERE ai.oppskrift_id = oppskrifter.id AND t.tagg = 'alkohol') \
                    ORDER BY RANDOM() LIMIT 20";
