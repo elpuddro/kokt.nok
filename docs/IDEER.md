@@ -45,8 +45,7 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
    kylling?»), tid, vegetar/vegan, allergener. Mer verdifullt med 5962
    oppskrifter. Bygger på eksisterende søk i `hent_oppskrifter`.
 
-6. **Ukesmeny / måltidsplan** — planlegg flere dager med måltider, generer
-   samlet handleliste for uka. Bygger rett på handlelista + porsjonsskalering.
+~~6. **Ukesmeny / måltidsplan**~~ — dekket av #15 + #23.
 
 7. ~~**Egne notater / merknader**~~ — ✅ **FERDIG 2026-06-18.** Textarea nederst i
    detaljvisningen, auto-lagret debounced (~400 ms) til Tauri Store
@@ -139,12 +138,11 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
 6. **Ukesmeny / måltidsplan (utvidet)** — allerede dekket av #15, men rom for
    utvidelser: budsjett per uke, sesong-spesifikke retter (se #23 nedenfor).
 
-23. **Sesong- og høytidsspesifikke oppskriftsforslag** — forsiden (og evt.
-    matplanleggeren) fremhever retter knyttet til høytider og matdager:for eksempel pinnekjøtt
-    og ribbe til jul, kalkun til Thanksgiving eller nyttårsaften, lam til påske, bidos til samisk
-    nasjonaldag, jordbær og grillmat eller spekemat og rømmegrøt til sankthans, fårikål til fårikålens dag (siste tordag i
-    sept.), valentinesmiddag, etc. Bygger på eksisterende temaer (#8) og tidsbasert
-    forside (#21) — der vi på spesifikke tider i året eller datoer bytter forsiden til sesong-kurert liste
-    i stedet for tidspunktbasert. **Skjult kostnad:** manuell tagging av oppskrifter
-    per høytid (kan gjøres med nøkkelord-regler på ingredienser/navn), eller en
-    dedikert `hoytid`-kolonne i `kategorier`-tabellen. Lagt til 2026-06-24.
+~~23. **Sesong- og høytidsspesifikke oppskriftsforslag**~~ — ✅ **FERDIG 2026-06-25.**
+    Forsiden bytter til sesong-kurerte retter i 7 høytidsvindu (jul, påske, 17. mai,
+    sankthans, fårikålens dag, halloween, valentinsdag). Matplanleggeren får sesong-toggle
+    (+50 score for høytidstagget rett). Nøkkelordbasert tagging via `scripts/tagg_hoytid.py`
+    (957 oppskrifter tagget). `høytid TEXT`-kolonne i `kokt.db`. Rust-kommando `hoytid_aktiv()`
+    med Computus-påskeberegning. Ingen AI.
+    Spec: `docs/superpowers/specs/2026-06-24-hoytid-sesong-design.md`.
+    Plan: `docs/superpowers/plans/2026-06-24-hoytid-sesong.md`.
