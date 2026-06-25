@@ -154,3 +154,58 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     Alkohol-holdige oppskrifter ekskludert permanent fra alle automatiske forslag.
     Spec: `docs/superpowers/specs/2026-06-25-hoytidspynt-design.md`.
     Plan: `docs/superpowers/plans/2026-06-25-hoytidspynt.md`.
+
+---
+
+## 💡 Idéer lagt til 2026-06-25
+
+25. **Android-nettbrett-versjon** — Tauri v2 Android-port av hele appen, distribusjon
+    via Google Play. Full funksjonsparitet med Windows/Linux. `ensure_db()` ved
+    oppstart, `app_data_dir()`-basert sti, lesbar DB (oppskriftsredigering), wakelock
+    for Cook Mode. UI-tilpasning for berøring og portrait/landscape.
+    Spec: `docs/superpowers/specs/2026-06-25-android-tablet-design.md`. **Ikke startet.**
+
+26. **DB-indeksoptimalisering** — sjekk hvilke indekser som faktisk finnes i `kokt.db`
+    (`sqlite_master`) og legg til manglende på `ingredienser.oppskrift_id`,
+    `ingredienser.navn`, `ingrediens_tagg.navn`, `naering.ingredient_navn`,
+    `priser.ingredient_navn`. Verifiser med `EXPLAIN QUERY PLAN`. **Ikke startet.**
+
+27. **Fuzzy-søk (FTS5 trigram)** — SQLite FTS5 med trigram-tokenizer fanger
+    stavefeil («spageti» → «spaghetti»). Bygger på eksisterende AND-søk (#5).
+    Ingen ekstern avhengighet. **Ikke startet.**
+
+28. **Oppskrift-deling** (kun Android/åpen utgave, ikke fengselsutgaven) — eksporter
+    én oppskrift som formatert tekst/PDF og åpne Android share-sheet via
+    Tauri `share`-plugin. Nyttig for å sende oppskrifter til familie/venner.
+    **Ikke startet.**
+
+29. **Kaloriregnskap per dag** — enkel dagsoversikt der brukeren logger hva de har
+    spist (velger fra oppskrifter eller matvarer), og ser fremgang mot kcal-/makro-
+    målet fra helseprofilen (#20). Persistert i Tauri Store. Ingen AI.
+    **Ikke startet.**
+
+30. **Innkjøpsprishistorikk** — vis pristrend per ingrediens over tid basert på
+    `priser`-tabellens `oppdatert`-felt. Enkelt linjediagram (SVG) i en ny
+    «Priser»-visning. Gir brukeren oversikt over mat-inflasjon. **Ikke startet.**
+
+31. **Porsjons-kalkulator i Cook Mode** — juster porsjoner direkte i Cook Mode
+    (slider/spinner), og se ingrediensmengder oppdatert live uten å gå ut av
+    visningen. I dag må man gå til detaljvisning og tilbake. **Ikke startet.**
+
+32. **Oppskrift-samlinger / «kokebok»** — brukeren kan lage navngitte samlinger
+    (f.eks. «Julemiddag 2026», «Treningsmat», «Barnas favoritter») og legge
+    oppskrifter i dem. Utvidelse av Favoritter-konseptet. Tauri Store.
+    **Ikke startet.**
+
+33. **Næringssammenligning** — sammenlign næringsinnhold mellom to eller tre
+    oppskrifter side-om-side. Nyttig for å velge sunneste alternativ. Bygger
+    på eksisterende næringsbereging i `hent_oppskrift`. **Ikke startet.**
+
+34. **Mørk modus auto-bytte** — følg OS-systeminnstillingen (prefers-color-scheme)
+    automatisk i stedet for manuell temavalg, med mulighet til å overstyre.
+    Minimal CSS-endring, stor praktisk verdi spesielt på Android. **Ikke startet.**
+
+35. **Offline oppdateringssjekk** (kun åpen/GitHub-utgave, ikke fengselsutgaven) —
+    varsle brukeren diskret når en ny versjon er tilgjengelig på GitHub Releases,
+    med lenke til nedlasting. Ingen auto-oppdatering, kun informasjon.
+    **Ikke startet.**
