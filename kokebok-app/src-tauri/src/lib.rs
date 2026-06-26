@@ -491,7 +491,7 @@ fn hent_oppskrifter(
 
 // ─── Kommando: full oppskrift ──────────────────────────────────────────────────
 #[tauri::command]
-fn hent_oppskrift(app: AppHandle, id: i64) -> Result<Option<Value>, String> {
+fn hent_oppskrift(app: AppHandle, id: i64, lang: Option<String>) -> Result<Option<Value>, String> {
     let conn = open(&app)?;
 
     // Eksplisitt kolonneliste (ikke SELECT *) for å unngå å materialisere
@@ -499,7 +499,9 @@ fn hent_oppskrift(app: AppHandle, id: i64) -> Result<Option<Value>, String> {
     // kbilde-protokollen, ikke herfra.
     let mut rows = query_json(
         &conn,
-        "SELECT id, slug, navn, type, beskrivelse, porsjoner, tid, bilde, url, hentet
+        "SELECT id, slug, COALESCE(navn_en, navn) AS navn, type,
+                COALESCE(beskrivelse_en, beskrivelse) AS beskrivelse,
+                porsjoner, tid, bilde, url, hentet
          FROM oppskrifter WHERE id = ?",
         &[&id],
     )?;
@@ -511,7 +513,7 @@ fn hent_oppskrift(app: AppHandle, id: i64) -> Result<Option<Value>, String> {
 
     let ings = query_json(
         &conn,
-        "SELECT gruppe, mengde, enhet, navn, raatekst, sortering
+        "SELECT gruppe, mengde, enhet, COALESCE(navn_en, navn) AS navn, raatekst, sortering
          FROM ingredienser WHERE oppskrift_id = ? ORDER BY gruppe, sortering",
         &[&id],
     )?;
@@ -519,7 +521,7 @@ fn hent_oppskrift(app: AppHandle, id: i64) -> Result<Option<Value>, String> {
 
     let trinn = query_json(
         &conn,
-        "SELECT nummer, tekst FROM trinn WHERE oppskrift_id = ? ORDER BY nummer",
+        "SELECT nummer, COALESCE(tekst_en, tekst) AS tekst FROM trinn WHERE oppskrift_id = ? ORDER BY nummer",
         &[&id],
     )?;
     obj.insert("trinn".into(), Value::Array(trinn));
