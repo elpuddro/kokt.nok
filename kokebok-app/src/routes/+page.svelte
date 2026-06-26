@@ -18,6 +18,7 @@
   import { versjonerLast, kladd_sett, kladd_fjern, versjon_lagre, versjon_slett } from "$lib/versjoner";
   import { kopiFraOppskrift, beregnDiff, type OppskriftKopi, type KopiIngrediens, type KopiTrinn, type VersjonSnapshot } from "$lib/versjoner-logikk";
   import Hoytidspynt from "$lib/Hoytidspynt.svelte";
+  import { formaterOppskrift } from "$lib/deling";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -71,6 +72,10 @@
   let profilFelt = $state({ navn: "", kjønn: "mann" as "mann"|"kvinne", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat" as Brukerprofil["aktivitet"], mål: "vedlikehold" as Brukerprofil["mål"], midje: undefined as number | undefined, midjeFilter: false });
   let aboutInfo = $state<{ navn: string; epost: string; versjon: string; beskrivelse: string } | null>(null);
   let innstFane = $state<"tema" | "diett" | "profil">("tema");
+
+  // ── Deling ──────────────────────────────────────────────────────────────────
+  const erFengsel = import.meta.env.VITE_UTGAVE === 'fengsel';
+  let delKopiert = $state(false);
 
   // ── Versjonering / redigering ────────────────────────────────────────────────
   let redigerModus = $state(false);
@@ -642,6 +647,22 @@
       loading = false;
     }
   }
+  async function delOppskrift(opp: any) {
+    const tekst = formaterOppskrift({
+      navn: opp.navn,
+      porsjoner: opp.porsjoner,
+      ingredienser: opp.ingredienser,
+      trinn: opp.trinn,
+    });
+    try {
+      await navigator.clipboard.writeText(tekst);
+      delKopiert = true;
+      setTimeout(() => { delKopiert = false; }, 2000);
+    } catch {
+      alert("Kunne ikke kopiere — prøv å markere teksten manuelt");
+    }
+  }
+
   function lukkDetalj() {
     slåAvCookMode();
     currentOppskrift = null;
@@ -1537,6 +1558,11 @@
           title={favoritter.has(opp.id) ? "Fjern favoritt" : "Legg til favoritt"}
           onclick={() => toggleFavoritt(opp.id)}
         >{favoritter.has(opp.id) ? "⭐ Favoritt" : "☆ Favoritt"}</button>
+        {#if !erFengsel}
+          <button class="del-knapp" onclick={() => delOppskrift(opp)}>
+            {delKopiert ? '✓ Kopiert!' : '📋 Del'}
+          </button>
+        {/if}
         <button
           class="detail-handle"
           class:aktiv={handleliste.some((p) => p.id === opp.id)}
@@ -2110,6 +2136,17 @@
     font-size: 0.9rem;
   }
   .detail-fav.aktiv { border-color: var(--accent-dark); }
+  .del-knapp {
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--farge-kant, #ddd);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background 0.2s;
+  }
+  .del-knapp:hover {
+    background: var(--farge-kant, #eee);
+  }
   .detail-handle {
     border: 1px solid var(--border);
     background: var(--bg-warm);
