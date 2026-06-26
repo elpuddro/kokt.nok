@@ -177,19 +177,22 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     58× raskere enn LIKE (0.2ms vs 11.6ms). Fanger 1–2 bokstavs-avvik.
     Skript: `scripts/bygg_fts.py`. Rust: `fts_ids_for_ord()` i `lib.rs`.
 
-28. **Oppskrift-deling** (kun Android/åpen utgave, ikke fengselsutgaven) — eksporter
-    én oppskrift som formatert tekst/PDF og åpne Android share-sheet via
-    Tauri `share`-plugin. Nyttig for å sende oppskrifter til familie/venner.
-    **Ikke startet.**
+28. **Oppskrift-deling** (kun Android + åpen Windows/Linux-utgave, ikke fengselsutgaven) —
+    eksporter én oppskrift som formatert tekst/PDF og åpne Android share-sheet via
+    Tauri `share`-plugin. På desktop: kopier til utklippstavle eller eksporter som
+    tekstfil. Nyttig for å sende oppskrifter til familie/venner. **Ikke startet.**
 
 29. **Kaloriregnskap per dag** — enkel dagsoversikt der brukeren logger hva de har
     spist (velger fra oppskrifter eller matvarer), og ser fremgang mot kcal-/makro-
     målet fra helseprofilen (#20). Persistert i Tauri Store. Ingen AI.
     **Ikke startet.**
 
-30. **Innkjøpsprishistorikk** — vis pristrend per ingrediens over tid basert på
-    `priser`-tabellens `oppdatert`-felt. Enkelt linjediagram (SVG) i en ny
-    «Priser»-visning. Gir brukeren oversikt over mat-inflasjon. **Ikke startet.**
+30. **Manuell prisregistrering + historikk** — brukeren legger inn pris per ingrediens
+    manuelt (f.eks. fra kvittering), med dato og butikk (valgfritt). Historikk vises
+    som enkel pristrend per ingrediens (SVG-linjediagram). Særlig verdifullt i
+    fengselsutgaven: 120 beboere uten internett kan kollektivt holde prislisten
+    oppdatert ved å registrere kvitteringer. Gir grunnlag for realistiske
+    kostnadsestimater i handlelisten (#1). Persistert i Tauri Store. **Ikke startet.**
 
 ~~31. **Porsjons-kalkulator i Cook Mode**~~ — ✅ **ALLEREDE IMPLEMENTERT.**
     Porsjons-raden (−/+) er alltid synlig i detaljvisningen, som er samme view
