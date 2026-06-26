@@ -673,6 +673,7 @@
     sammenlignVersjon = null;
     lagreModalApen = false;
     lagreLabel = "";
+    delKopiert = false;
     if (kladdTimer) { clearTimeout(kladdTimer); kladdTimer = null; }
   }
 
@@ -2138,8 +2139,9 @@
   .detail-fav.aktiv { border-color: var(--accent-dark); }
   .del-knapp {
     padding: 0.4rem 0.8rem;
-    border-radius: 4px;
+    border-radius: var(--radius);
     border: 1px solid var(--farge-kant, #ddd);
+    background: var(--bg-warm);
     cursor: pointer;
     font-size: 0.9rem;
     transition: background 0.2s;
