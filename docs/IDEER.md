@@ -230,4 +230,4 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     kategorinavn, enheter, tidspunkt-labels OG databaseinnhold (5962 oppskrifter
     får engelske navn, beskrivelser og ingrediensnavn via maskinoversettelse +
     manuell QA). Særlig viktig for Android-lansering internasjonalt.
-    **Ikke startet.**
+    - [x] #38 Tospråklig app — Sub-prosjekt A (GUI-lag) FERDIG 2026-06-26

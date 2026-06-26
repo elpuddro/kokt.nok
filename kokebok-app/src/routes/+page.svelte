@@ -39,6 +39,12 @@
   };
   const emoji = (t: string | null | undefined) => EMOJI[t ?? ""] ?? "🍽️";
 
+  function katNavn(type: string): string {
+    const key = "cat_" + type.toLowerCase().replace(/ /g, "_").replace(/-/g, "-");
+    const oversatt = t(key, lang);
+    return oversatt !== key ? oversatt : type;
+  }
+
   // ── State (Svelte 5 runes) ─────────────────────────────────────────────────
   let kategorier = $state<any[]>([]);
   let currentKategori = $state("alle");
@@ -1077,7 +1083,7 @@
       onclick={() => velgKategori("alle")}
     >
       <span class="kat-emoji">{EMOJI["alle"]}</span>
-      <span class="kat-navn">Alle oppskrifter</span>
+      <span class="kat-navn">{t("cat_alle", lang)}</span>
       <span class="kat-teller">{totalAlle.toLocaleString("nb-NO")}</span>
     </button>
     <button
@@ -1148,7 +1154,7 @@
         onclick={() => velgKategori(k.kategori)}
       >
         <span class="kat-emoji">{emoji(k.kategori)}</span>
-        <span class="kat-navn">{k.kategori}</span>
+        <span class="kat-navn">{katNavn(k.kategori)}</span>
         <span class="kat-teller">{k.antall}</span>
       </button>
     {/each}
@@ -1173,9 +1179,9 @@
       {:else if currentKategori === "__fav__"}
         ⭐ Favoritter
       {:else if currentKategori === "alle"}
-        {sok ? `Søkeresultater for «${sok}»` : "Alle oppskrifter"}
+        {sok ? `Søkeresultater for «${sok}»` : t("cat_alle", lang)}
       {:else}
-        {currentKategori}
+        {katNavn(currentKategori)}
       {/if}
     </h1>
     {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && currentKategori !== "__priser__"}
