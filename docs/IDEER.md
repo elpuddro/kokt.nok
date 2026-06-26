@@ -223,3 +223,11 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     tilfeldig oppskrift i DB, gjett hva retten heter. Fire svaralternativer,
     poeng for riktig svar og hastighet, highscore i Tauri Store. Null ekstra
     data — henter rett fra eksisterende oppskrifter. **Ikke startet.**
+
+38. **Tospråklig app — norsk + engelsk** — appen bytter automatisk til engelsk
+    basert på systemspråk (`navigator.language`): norsk system → norsk app,
+    alt annet → engelsk. Dekker GUI (alle UI-strenger via `t(key)`-dict),
+    kategorinavn, enheter, tidspunkt-labels OG databaseinnhold (5962 oppskrifter
+    får engelske navn, beskrivelser og ingrediensnavn via maskinoversettelse +
+    manuell QA). Særlig viktig for Android-lansering internasjonalt.
+    **Ikke startet.**
