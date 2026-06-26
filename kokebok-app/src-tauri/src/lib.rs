@@ -1007,7 +1007,7 @@ fn kandidater_for_slot(
         JOIN ingrediens_tagg t ON t.navn = ai.navn \
         WHERE ai.oppskrift_id = o.id AND t.tagg = 'alkohol')";
     let sql = format!(
-        "SELECT o.id, o.navn, o.type, o.hoytid FROM oppskrifter o \
+        "SELECT o.id, COALESCE(o.navn_en, o.navn) AS navn, o.type, o.hoytid FROM oppskrifter o \
          WHERE o.type IN ({kat_ph}){diett_where}{alkohol_where} LIMIT 400"
     );
     let refs: Vec<&dyn rusqlite::ToSql> =
@@ -1487,7 +1487,7 @@ fn forside_oppskrifter(
 
     // Høytidsmodus: ignorer typer/nattFilter, filtrer på høytid-kolonne
     if let Some(ref h) = hoytid {
-        let sql = "SELECT id, navn, tid, bilde FROM oppskrifter \
+        let sql = "SELECT id, COALESCE(navn_en, navn) AS navn, tid, bilde FROM oppskrifter \
                    WHERE hoytid IS NOT NULL AND (',' || hoytid || ',') LIKE ('%,' || ? || ',%') \
                    AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
                        WHERE ai.oppskrift_id = oppskrifter.id AND t.tagg = 'alkohol') \
@@ -1518,7 +1518,7 @@ fn forside_oppskrifter(
         WHERE ai.oppskrift_id = oppskrifter.id AND t.tagg = 'alkohol')";
     let sql = if nattFilter {
         format!(
-            "SELECT id, navn, tid, bilde FROM oppskrifter \
+            "SELECT id, COALESCE(navn_en, navn) AS navn, tid, bilde FROM oppskrifter \
              WHERE type IN ({placeholders}) \
              AND id NOT IN ( \
                  SELECT DISTINCT oppskrift_id FROM trinn \
@@ -1530,7 +1530,7 @@ fn forside_oppskrifter(
         )
     } else {
         format!(
-            "SELECT id, navn, tid, bilde FROM oppskrifter \
+            "SELECT id, COALESCE(navn_en, navn) AS navn, tid, bilde FROM oppskrifter \
              WHERE type IN ({placeholders}) \
              {alkohol_ekskluder} \
              ORDER BY RANDOM() LIMIT 20"
