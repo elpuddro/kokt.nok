@@ -490,6 +490,13 @@
     await store.save();
   }
 
+  async function lagreSpraak() {
+    const store = await load("innstillinger.json");
+    await store.set("spraak", spraakValg);
+    await store.save();
+    lang = spraakValg === "auto" ? detectLang() : (spraakValg as Lang);
+  }
+
   function toggleLaas(dag: number, slot: string) {
     if (!plan) return;
     const s = (plan.dager[dag] as any)[slot];
@@ -1263,6 +1270,7 @@
         <button class:aktiv-fane={innstFane === "tema"} onclick={() => (innstFane = "tema")}>🎨 Temaer</button>
         <button class:aktiv-fane={innstFane === "diett"} onclick={() => (innstFane = "diett")}>🍽️ Kosthold</button>
         <button class:aktiv-fane={innstFane === "profil"} onclick={() => (innstFane = "profil")}>👤 Helseprofil</button>
+        <button class:aktiv-fane={innstFane === "spraak"} onclick={() => (innstFane = "spraak")}>🌐 {t("settings_language", lang)}</button>
       </div>
       {#if innstFane === "tema"}
       <details class="innst-seksjon">
@@ -1403,6 +1411,24 @@
           <div class="about-kontakt">{aboutInfo.navn} · {aboutInfo.epost}</div>
         </div>
       {/if}
+      {/if}
+      {#if innstFane === "spraak"}
+      <details class="innst-seksjon" open>
+        <summary><h2>{t("settings_language", lang)}</h2></summary>
+        <p class="innst-hint">Velg språk for appen. «Automatisk» bruker systemspråket ditt.</p>
+        <label class="tema-valg" class:valgt={spraakValg === "auto"}>
+          <input type="radio" name="spraak" value="auto" bind:group={spraakValg} onchange={lagreSpraak} />
+          <span>{t("lang_auto", lang)}</span>
+        </label>
+        <label class="tema-valg" class:valgt={spraakValg === "nb"}>
+          <input type="radio" name="spraak" value="nb" bind:group={spraakValg} onchange={lagreSpraak} />
+          <span>{t("lang_nb", lang)}</span>
+        </label>
+        <label class="tema-valg" class:valgt={spraakValg === "en"}>
+          <input type="radio" name="spraak" value="en" bind:group={spraakValg} onchange={lagreSpraak} />
+          <span>{t("lang_en", lang)}</span>
+        </label>
+      </details>
       {/if}
     </div>
   {/if}
