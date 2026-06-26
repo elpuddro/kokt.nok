@@ -787,6 +787,23 @@ fn ingrediens_forslag(app: AppHandle, prefiks: String) -> Result<Vec<String>, St
     Ok(rader.filter_map(|r| r.ok()).collect())
 }
 
+#[tauri::command]
+fn sok_ingredienser(app: AppHandle, q: String) -> Result<Vec<String>, String> {
+    if q.trim().is_empty() {
+        return Ok(vec![]);
+    }
+    let conn = open(&app)?;
+    let mønster = format!("%{}%", q.to_lowercase());
+    let mut stmt = conn.prepare(
+        "SELECT DISTINCT navn FROM ingredienser WHERE LOWER(navn) LIKE ?1 ORDER BY navn LIMIT 20"
+    ).map_err(|e| e.to_string())?;
+    let navn: Vec<String> = stmt.query_map([&mønster], |row| row.get(0))
+        .map_err(|e| e.to_string())?
+        .filter_map(|r| r.ok())
+        .collect();
+    Ok(navn)
+}
+
 #[derive(Serialize)]
 struct Forslag {
     id: i64,
@@ -1567,6 +1584,7 @@ pub fn run() {
             hent_oppskrifter_by_ids,
             cook_mode,
             ingrediens_forslag,
+            sok_ingredienser,
             hva_kan_jeg_lage,
             generer_matplan,
             about_info,
