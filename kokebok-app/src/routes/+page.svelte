@@ -18,6 +18,7 @@
   import { versjonerLast, kladd_sett, kladd_fjern, versjon_lagre, versjon_slett } from "$lib/versjoner";
   import { kopiFraOppskrift, beregnDiff, type OppskriftKopi, type KopiIngrediens, type KopiTrinn, type VersjonSnapshot } from "$lib/versjoner-logikk";
   import Hoytidspynt from "$lib/Hoytidspynt.svelte";
+  import { t, detectLang, type Lang } from "$lib/i18n";
   import { formaterOppskrift } from "$lib/deling";
   import { loggLast, loggLeggTil, loggFjern, type Loggpost, type MåltidTidspunkt } from "$lib/matvarelogg";
   import { loggForDato, tidspunktFraKlokkeslett, loggSumNæring, loggKcalPerDag } from "$lib/matvarelogg-logikk";
@@ -75,7 +76,11 @@
   let profilRedigerer = $state<Brukerprofil | null>(null);
   let profilFelt = $state({ navn: "", kjønn: "mann" as "mann"|"kvinne", alder: 30, høyde: 175, vekt: 75, aktivitet: "moderat" as Brukerprofil["aktivitet"], mål: "vedlikehold" as Brukerprofil["mål"], midje: undefined as number | undefined, midjeFilter: false });
   let aboutInfo = $state<{ navn: string; epost: string; versjon: string; beskrivelse: string } | null>(null);
-  let innstFane = $state<"tema" | "diett" | "profil">("tema");
+  let innstFane = $state<"tema" | "diett" | "profil" | "spraak">("tema");
+
+  // ── Språk ────────────────────────────────────────────────────────────────────
+  let spraakValg = $state<"nb" | "en" | "auto">("auto");
+  let lang: Lang = $state(detectLang());
 
   // ── Deling ──────────────────────────────────────────────────────────────────
   const erFengsel = import.meta.env.VITE_UTGAVE === 'fengsel';
@@ -987,6 +992,8 @@
     aktivHoytid = await invoke<string | null>("hoytid_aktiv");
     const innstStore = await load("innstillinger.json");
     pynt = (await innstStore.get<boolean>("pynt")) ?? false;
+    spraakValg = ((await innstStore.get<string>("spraak")) ?? "auto") as "nb" | "en" | "auto";
+    lang = spraakValg === "auto" ? detectLang() : (spraakValg as Lang);
     await lastForside();
     dagbokPoster = await loggLast();
     await oppdaterNæringMap(dagbokPoster);
