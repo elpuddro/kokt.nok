@@ -1596,7 +1596,7 @@
                 <div class="dagbok-post">
                   <span>
                     {#if p.type === 'oppskrift'}
-                      {næringMap[p.oppskriftId]?.navn ?? 'Ukjent oppskrift'} × {p.porsjoner}
+                      {næringMap[p.oppskriftId]?.navn ?? t("unknown_recipe", lang)} × {p.porsjoner}
                     {:else}
                       {p.beskrivelse}
                     {/if}
@@ -1758,7 +1758,7 @@
             <p>Trykk ⭐ på en oppskrift for å legge den til.</p>
           {:else}
             <div class="empty-icon">🔍</div>
-            <h3>Ingen oppskrifter funnet</h3>
+            <h3>{t("no_results", lang)}</h3>
             <p>Prøv å søke på noe annet, eller velg en annen kategori.</p>
             {#if aktiveDietter.length > 0}
               <p class="empty-hint">Noen kan være skjult av aktive kostholdsfiltre.</p>
@@ -1814,7 +1814,7 @@
   {#if loggModalApen}
     <div class="modal-bakgrunn" role="presentation" onclick={() => loggModalApen = false}>
       <div class="logg-modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
-        <div class="modal-tittel">Logg måltid</div>
+        <div class="modal-tittel">{t("btn_log_meal", lang)}</div>
 
         <label>Tidspunkt
           <select bind:value={loggTidspunkt}>
@@ -1995,15 +1995,15 @@
         >{favoritter.has(opp.id) ? "⭐ Favoritt" : "☆ Favoritt"}</button>
         {#if !erFengsel}
           <button class="del-knapp" onclick={() => delOppskrift(opp)}>
-            {delKopiert ? '✓ Kopiert!' : '📋 Del'}
+            {delKopiert ? t("btn_copied", lang) : '📋 ' + t("btn_share", lang)}
           </button>
         {/if}
         <button
           class="detail-handle"
           class:aktiv={handleliste.some((p) => p.id === opp.id)}
-          title={handleliste.some((p) => p.id === opp.id) ? "I handlelista" : "Legg i handleliste"}
+          title={handleliste.some((p) => p.id === opp.id) ? "I handlelista" : t("btn_add_to_list", lang)}
           onclick={() => leggIHandleliste(opp.id, curP)}
-        >{handleliste.some((p) => p.id === opp.id) ? "🛒 I handleliste" : "🛒 Legg i handleliste"}</button>
+        >{handleliste.some((p) => p.id === opp.id) ? "🛒 I handleliste" : "🛒 " + t("btn_add_to_list", lang)}</button>
         <button
           class="detail-cook"
           class:aktiv={cookModeAktiv}
@@ -2033,7 +2033,7 @@
         {#if opp.beskrivelse}<p class="detail-desc">{opp.beskrivelse}</p>{/if}
 
         <div class="portion-row">
-          <span class="portion-label">Porsjoner:</span>
+          <span class="portion-label">{t("servings", lang)}:</span>
           <div class="portion-ctrl">
             <button class="portion-btn" disabled={curP <= 1} onclick={() => endrePorsjoner(-1)}>−</button>
             <span class="portion-num">{curP}</span>
@@ -2066,7 +2066,7 @@
 
           <div class="detail-columns">
             <div>
-              <div class="detail-section-title">Ingredienser</div>
+              <div class="detail-section-title">{t("ingredients", lang)}</div>
               {#each k.ingredienser as ing, idx}
                 <div class="rediger-ing-rad">
                   <input class="rediger-input rediger-input-mengde" type="number" placeholder="mengde"
@@ -2104,7 +2104,7 @@
             </div>
 
             <div>
-              <div class="detail-section-title">Fremgangsmåte</div>
+              <div class="detail-section-title">{t("steps", lang)}</div>
               {#each k.trinn as trinn, idx}
                 <div class="rediger-trinn-rad">
                   <div class="rediger-trinn-nr">{idx + 1}</div>
@@ -2144,7 +2144,7 @@
         {:else}
           <div class="detail-columns">
             <div>
-              <div class="detail-section-title">Ingredienser</div>
+              <div class="detail-section-title">{t("ingredients", lang)}</div>
               {#each grupper as [g, ings]}
                 {#if multiGroup}<div class="ing-group-title">{g}</div>{/if}
                 {#each ings as i}
@@ -2158,7 +2158,7 @@
               {/each}
             </div>
             <div>
-              <div class="detail-section-title">Fremgangsmåte</div>
+              <div class="detail-section-title">{t("steps", lang)}</div>
               {#each opp.trinn as t, idx}
                 <div class="step-item">
                   <div class="step-num">{t.nummer ?? idx + 1}</div>
@@ -2268,7 +2268,7 @@
           </div>
         {/if}
         <section class="detail-notat">
-          <div class="detail-notat-title">📝 Mine notater</div>
+          <div class="detail-notat-title">📝 {t("notes", lang)}</div>
           <textarea
             class="detail-notat-felt"
             placeholder="Skriv ditt eget notat… (lagres automatisk)"
