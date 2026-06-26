@@ -1062,7 +1062,7 @@
       <input
         id="sok-input"
         type="search"
-        placeholder="Søk oppskrifter…"
+        placeholder={t("search_placeholder", lang)}
         autocomplete="off"
         value={sok}
         oninput={onSearchInput}
@@ -1086,7 +1086,7 @@
       onclick={velgFavoritter}
     >
       <span class="kat-emoji">⭐</span>
-      <span class="kat-navn">Favoritter</span>
+      <span class="kat-navn">{t("btn_favorites", lang)}</span>
       <span class="kat-teller">{favoritter.size}</span>
     </button>
     <button
@@ -1095,7 +1095,7 @@
       onclick={velgHandleliste}
     >
       <span class="kat-emoji">🛒</span>
-      <span class="kat-navn">Handleliste</span>
+      <span class="kat-navn">{t("btn_shopping_list", lang)}</span>
       <span class="kat-teller">{handleliste.length}</span>
     </button>
     <button
@@ -1104,7 +1104,7 @@
       onclick={velgKjøleskap}
     >
       <span class="kat-emoji">🧊</span>
-      <span class="kat-navn">Kjøleskap</span>
+      <span class="kat-navn">{t("btn_inventory", lang)}</span>
       <span class="kat-teller">{lager.length}</span>
     </button>
     <button
@@ -1113,7 +1113,7 @@
       onclick={velgMatplan}
     >
       <span class="kat-emoji">📅</span>
-      <span class="kat-navn">Matplan</span>
+      <span class="kat-navn">{t("btn_meal_plan", lang)}</span>
     </button>
     <button
       class="kat-btn"
@@ -1121,7 +1121,7 @@
       onclick={velgDagbok}
     >
       <span class="kat-emoji">📖</span>
-      <span class="kat-navn">Dagbok</span>
+      <span class="kat-navn">{t("btn_diary", lang)}</span>
     </button>
     <button
       class="kat-btn"
@@ -1129,7 +1129,7 @@
       onclick={velgPriser}
     >
       <span class="kat-emoji">🏷️</span>
-      <span class="kat-navn">Priser</span>
+      <span class="kat-navn">{t("btn_prices", lang)}</span>
     </button>
     <button
       class="kat-btn"
@@ -1137,7 +1137,7 @@
       onclick={velgInnstillinger}
     >
       <span class="kat-emoji">⚙️</span>
-      <span class="kat-navn">Innstillinger</span>
+      <span class="kat-navn">{t("btn_settings", lang)}</span>
     </button>
     <div class="kat-divider"></div>
 
@@ -1159,7 +1159,7 @@
   <div id="main-header">
     <h1 id="header-tittel">
       {#if currentKategori === "__innst__"}
-        ⚙️ Innstillinger
+        ⚙️ {t("btn_settings", lang)}
       {:else if currentKategori === "__handle__"}
         🛒 Handleliste
       {:else if currentKategori === "__lager__"}
