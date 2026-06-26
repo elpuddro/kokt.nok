@@ -340,11 +340,12 @@
       try {
         const o = await invoke<any>("hent_oppskrift", { id });
         if (o) {
+          const pp = (o as any).porsjoner || 4;
           næringMap[id] = {
-            kcal: o.naering?.energi ?? 0,
-            protein: o.naering?.protein ?? 0,
-            fett: o.naering?.fett ?? 0,
-            karbo: o.naering?.karbohydrat ?? 0,
+            kcal: (o.naering?.energi ?? 0) / pp,
+            protein: (o.naering?.protein ?? 0) / pp,
+            fett: (o.naering?.fett ?? 0) / pp,
+            karbo: (o.naering?.karbohydrat ?? 0) / pp,
             navn: (o as any).navn ?? 'Ukjent oppskrift',
           };
         }
@@ -1590,7 +1591,7 @@
             {@const pst = Math.round(sum.kcal / behov * 100)}
             <div class="fremgangsbar-wrap">
               <div class="fremgangsbar"
-                style="width:{Math.min(pst,100)}%;background:{pst<100?'var(--farge-ok,green)':pst<=120?'var(--farge-advarsel,orange)':'var(--farge-feil,red)'}">
+                style="width:{Math.min(pst,100)}%;background:{pst<100?'#4caf50':pst<=120?'#ff9800':'#f44336'}">
               </div>
             </div>
             <span>{pst}% av dagsbehov ({behov} kcal)</span>
