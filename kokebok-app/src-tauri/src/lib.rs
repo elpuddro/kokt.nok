@@ -676,7 +676,7 @@ fn hent_oppskrift(app: AppHandle, id: i64, lang: Option<String>) -> Result<Optio
 
 // ─── Kommando: oppskrifter etter id-liste (favoritter) ─────────────────────────
 #[tauri::command]
-fn hent_oppskrifter_by_ids(app: AppHandle, ids: Vec<i64>) -> Result<Vec<Value>, String> {
+fn hent_oppskrifter_by_ids(app: AppHandle, ids: Vec<i64>, lang: Option<String>) -> Result<Vec<Value>, String> {
     if ids.is_empty() {
         return Ok(Vec::new());
     }
@@ -686,10 +686,10 @@ fn hent_oppskrifter_by_ids(app: AppHandle, ids: Vec<i64>) -> Result<Vec<Value>, 
     // hent_oppskrifter sin owned/filter_refs).
     let placeholders = vec!["?"; ids.len()].join(",");
     let sql = format!(
-        "SELECT id, slug, navn, type, porsjoner, tid, bilde
+        "SELECT id, slug, COALESCE(navn_en, navn) AS navn, type, porsjoner, tid, bilde
          FROM   oppskrifter
          WHERE  id IN ({placeholders})
-         ORDER  BY navn COLLATE NOCASE"
+         ORDER  BY COALESCE(navn_en, navn) COLLATE NOCASE"
     );
     let refs: Vec<&dyn rusqlite::ToSql> =
         ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
@@ -793,14 +793,16 @@ fn ingrediens_forslag(app: AppHandle, prefiks: String) -> Result<Vec<String>, St
 }
 
 #[tauri::command]
-fn sok_ingredienser(app: AppHandle, q: String) -> Result<Vec<String>, String> {
+fn sok_ingredienser(app: AppHandle, q: String, lang: Option<String>) -> Result<Vec<String>, String> {
     if q.trim().is_empty() {
         return Ok(vec![]);
     }
     let conn = open(&app)?;
     let mønster = format!("%{}%", q.to_lowercase());
     let mut stmt = conn.prepare(
-        "SELECT DISTINCT navn FROM ingredienser WHERE LOWER(navn) LIKE ?1 ORDER BY navn LIMIT 20"
+        "SELECT DISTINCT COALESCE(navn_en, navn) AS navn FROM ingredienser \
+         WHERE LOWER(COALESCE(navn_en, navn)) LIKE ?1 OR LOWER(navn) LIKE ?1 \
+         ORDER BY 1 LIMIT 20"
     ).map_err(|e| e.to_string())?;
     let navn: Vec<String> = stmt.query_map([&mønster], |row| row.get(0))
         .map_err(|e| e.to_string())?
