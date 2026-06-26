@@ -40,7 +40,7 @@
   const emoji = (t: string | null | undefined) => EMOJI[t ?? ""] ?? "🍽️";
 
   function katNavn(type: string): string {
-    const key = "cat_" + type.toLowerCase().replace(/ /g, "_").replace(/-/g, "-");
+    const key = "cat_" + type.toLowerCase().replace(/ /g, "_");
     const oversatt = t(key, lang);
     return oversatt !== key ? oversatt : type;
   }
