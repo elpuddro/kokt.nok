@@ -21,6 +21,8 @@
   import { formaterOppskrift } from "$lib/deling";
   import { loggLast, loggLeggTil, loggFjern, type Loggpost, type MåltidTidspunkt } from "$lib/matvarelogg";
   import { loggForDato, tidspunktFraKlokkeslett, loggSumNæring, loggKcalPerDag } from "$lib/matvarelogg-logikk";
+  import { priserLast, priserLeggTilFlere, prisOppdater, prisSlett, type Prispost } from "$lib/priser";
+  import { prisForIngrediens, prisHistorikk, unike_ingredienser } from "$lib/priser-logikk";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -105,6 +107,16 @@
   let loggFriFett = $state<number | null>(null);
   let loggFriKarbo = $state<number | null>(null);
   let næringMap = $state<Record<number, { kcal: number; protein: number; fett: number; karbo: number; navn: string }>>({});
+
+  // ── Priser ────────────────────────────────────────────────────────────────────
+  type KvRad = { ingrediens: string; pris: string; enhet: Prispost["enhet"]; forslag: string[] };
+  let priserPoster = $state<Prispost[]>([]);
+  let prisSearchTerm = $state("");
+  let kvitteringApen = $state(false);
+  let kvDato = $state<string>(new Date().toISOString().slice(0, 10));
+  let kvButikk = $state("");
+  let kvRader = $state<KvRad[]>([{ ingrediens: "", pris: "", enhet: "stk", forslag: [] }]);
+  let historikkIngrediens = $state<string | null>(null);
 
   // ── Tidsbasert forside ────────────────────────────────────────────────────────
   interface ForsideOppskrift { id: number; navn: string; tid: string | null; bilde: string | null }
@@ -307,6 +319,13 @@
 
   function velgDagbok() {
     currentKategori = "__dagbok__";
+    side = 1;
+    sok = "";
+    oppskrifter = [];
+  }
+
+  function velgPriser() {
+    currentKategori = "__priser__";
     side = 1;
     sok = "";
     oppskrifter = [];
@@ -970,6 +989,7 @@
     await lastForside();
     dagbokPoster = await loggLast();
     await oppdaterNæringMap(dagbokPoster);
+    priserPoster = await priserLast();
   });
 
   onDestroy(() => {
@@ -1021,7 +1041,7 @@
     {/if}
   </div>
 
-  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
+  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && currentKategori !== "__priser__"}
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
       <input
@@ -1090,6 +1110,14 @@
     </button>
     <button
       class="kat-btn"
+      class:active={currentKategori === "__priser__"}
+      onclick={velgPriser}
+    >
+      <span class="kat-emoji">🏷️</span>
+      <span class="kat-navn">Priser</span>
+    </button>
+    <button
+      class="kat-btn"
       class:active={currentKategori === "__innst__"}
       onclick={velgInnstillinger}
     >
@@ -1125,6 +1153,8 @@
         📅 Matplan
       {:else if currentKategori === "__dagbok__"}
         📖 Dagbok
+      {:else if currentKategori === "__priser__"}
+        🏷️ Priser
       {:else if currentKategori === "__fav__"}
         ⭐ Favoritter
       {:else if currentKategori === "alle"}
@@ -1133,7 +1163,7 @@
         {currentKategori}
       {/if}
     </h1>
-    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && currentKategori !== "__priser__"}
     <span id="header-antall" class="count-badge">
       {#if currentKategori === "__handle__"}
         {handleliste.length} oppskrifter
@@ -1142,12 +1172,12 @@
       {/if}
     </span>
     {/if}
-    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
+    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && currentKategori !== "__priser__"}
       <button class="diett-pille" onclick={() => (currentKategori = "__innst__")}>
         🍽️ {aktiveDietter.length} {aktiveDietter.length === 1 ? "filter" : "filtre"} aktive
       </button>
     {/if}
-    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__handle__" && currentKategori !== "__fav__" && currentKategori !== "__dagbok__"}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__handle__" && currentKategori !== "__fav__" && currentKategori !== "__dagbok__" && currentKategori !== "__priser__"}
       <select class="sorter-select" bind:value={sorter} onchange={onSorterChange}>
         <option value="navn_asc">Navn A–Å</option>
         <option value="navn_desc">Navn Å–A</option>
@@ -1191,14 +1221,27 @@
           {:else}
             <ul>
               {#each handleAgg.ingredienser as i (i.navn + "|" + (i.enhet ?? ""))}
+                {@const prisMatch = prisForIngrediens(i.navn, priserPoster)}
                 <li>
                   <span class="handle-mengde">{fmtMengde(i.mengde)} {i.enhet ?? ""}</span>
                   <span class="handle-ingnavn">{i.navn}</span>
+                  {#if prisMatch}
+                    <span class="ing-pris">{prisMatch.pris.toFixed(2)} kr/{prisMatch.enhet}</span>
+                  {:else}
+                    <span class="ing-pris ingen-pris">—</span>
+                  {/if}
                 </li>
               {/each}
             </ul>
             {#if handleAgg.totalsum > 0}
               <div class="handle-sum">💰 Estimert totalsum: ca. {handleAgg.totalsum} kr</div>
+            {/if}
+            {@const totalPris = handleAgg.ingredienser.reduce((sum, ing) => {
+              const p = prisForIngrediens(ing.navn, priserPoster);
+              return p ? sum + p.pris : sum;
+            }, 0)}
+            {#if totalPris > 0}
+              <div class="handlesum">Dine registrerte priser: ca. {totalPris.toFixed(0)} kr</div>
             {/if}
           {/if}
         </div>
@@ -1582,7 +1625,59 @@
     </div>
   {/if}
 
-  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
+  {#if currentKategori === "__priser__"}
+    <div class="priser-visning">
+      <button class="primær" onclick={() => { kvitteringApen = true; }}>📋 Legg inn kvittering</button>
+      <input type="search" placeholder="Søk ingrediens..." bind:value={prisSearchTerm} />
+
+      {@const visIngr = unike_ingredienser(priserPoster).filter(n => !prisSearchTerm || n.includes(prisSearchTerm.toLowerCase()))}
+      {#each visIngr as navn}
+        {@const siste = prisForIngrediens(navn, priserPoster)}
+        <div class="pris-rad" role="button" tabindex="0"
+          onclick={() => { historikkIngrediens = historikkIngrediens === navn ? null : navn; }}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') historikkIngrediens = historikkIngrediens === navn ? null : navn; }}>
+          <span class="pris-navn">{navn}</span>
+          {#if siste}
+            <span class="pris-verdi">{siste.pris.toFixed(2)} kr/{siste.enhet}</span>
+            <span class="pris-dato">{siste.dato}{siste.butikk ? ` · ${siste.butikk}` : ''}</span>
+          {/if}
+          <span class="pris-chevron">{historikkIngrediens === navn ? '▲' : '▼'}</span>
+        </div>
+        {#if historikkIngrediens === navn}
+          {@const hist = prisHistorikk(navn, priserPoster)}
+          {#if hist.length >= 2}
+            {@const maxP = Math.max(...hist.map(h => h.pris))}
+            {@const minP = Math.min(...hist.map(h => h.pris))}
+            {@const range = maxP - minP || 1}
+            <svg viewBox="0 0 {hist.length * 40} 80" class="pris-graf">
+              <polyline
+                points={hist.map((h, idx) => `${idx*40+20},${70 - Math.round(((h.pris-minP)/range)*60)}`).join(' ')}
+                fill="none" stroke="var(--accent,#b5651d)" stroke-width="2" />
+              {#each hist as h, idx}
+                <circle cx={idx*40+20} cy={70 - Math.round(((h.pris-minP)/range)*60)} r="3"
+                  fill="var(--accent,#b5651d)">
+                  <title>{h.dato}: {h.pris} kr/{h.enhet}{h.butikk ? ` (${h.butikk})` : ''}</title>
+                </circle>
+              {/each}
+            </svg>
+          {/if}
+          <ul class="pris-historikk-liste">
+            {#each [...prisHistorikk(navn, priserPoster)].reverse() as h}
+              <li>
+                {h.dato} — {h.pris.toFixed(2)} kr/{h.enhet}{h.butikk ? ` · ${h.butikk}` : ''}
+                <button onclick={async (e) => { e.stopPropagation(); priserPoster = await prisSlett(h.id); }}>×</button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      {/each}
+      {#if visIngr.length === 0}
+        <p class="ingen">Ingen priser registrert ennå. Legg inn kvittering for å komme i gang.</p>
+      {/if}
+    </div>
+  {/if}
+
+  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && currentKategori !== "__priser__"}
   <div id="grid-wrap">
     {#if currentKategori === "alle" && !sok && forsideOppskrifter.length > 0}
       <div class="forside-wrap">
@@ -1662,7 +1757,7 @@
       {/if}
     </div>
 
-    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && pages > 1}
+    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && currentKategori !== "__priser__" && pages > 1}
       <div id="pagination">
         <button class="page-btn" disabled={side === 1} onclick={() => gåTilSide(side - 1)}>‹</button>
         {#each pageNums as p, idx (p)}
@@ -1750,6 +1845,75 @@
             loggValgtOppskrift = null; loggSøk = ""; loggPorsjoner = 1;
             loggFriBesk = ""; loggFriKcal = null; loggFriProtein = null; loggFriFett = null; loggFriKarbo = null;
           }}>Logg</button>
+        </div>
+      </div>
+    </div>
+  {/if}
+
+  {#if kvitteringApen}
+    <div class="modal-bakgrunn" role="presentation" onclick={() => { kvitteringApen = false; }}>
+      <div class="kvittering-modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+        <div class="modal-tittel">Legg inn kvittering</div>
+        <div class="kv-header">
+          <input type="date" bind:value={kvDato} />
+          <input type="text" placeholder="Butikk (valgfritt)" bind:value={kvButikk} />
+        </div>
+        <table class="kv-tabell">
+          <thead><tr><th>Ingrediens</th><th>Pris (kr)</th><th>Enhet</th><th></th></tr></thead>
+          <tbody>
+            {#each kvRader as rad, idx}
+              <tr>
+                <td class="kv-ingrediens-celle">
+                  <input type="text" bind:value={rad.ingrediens}
+                    oninput={async () => {
+                      if (rad.ingrediens.length >= 2) {
+                        rad.forslag = await invoke<string[]>("sok_ingredienser", { q: rad.ingrediens });
+                      } else { rad.forslag = []; }
+                      kvRader = [...kvRader];
+                    }}
+                    placeholder="Ingrediens" />
+                  {#if rad.forslag.length > 0}
+                    <ul class="kv-forslag">
+                      {#each rad.forslag.slice(0,6) as f}
+                        <li onclick={() => { rad.ingrediens = f; rad.forslag = []; kvRader = [...kvRader]; }}>{f}</li>
+                      {/each}
+                    </ul>
+                  {/if}
+                </td>
+                <td><input type="number" bind:value={rad.pris} min="0" step="0.10" placeholder="0.00"
+                  onkeydown={(e) => {
+                    if (e.key === 'Enter') {
+                      if (idx === kvRader.length - 1) kvRader = [...kvRader, { ingrediens: "", pris: "", enhet: "stk", forslag: [] }];
+                      setTimeout(() => (document.querySelectorAll('.kv-tabell input[type=text]')[idx+1] as HTMLElement)?.focus(), 0);
+                    }
+                  }} /></td>
+                <td>
+                  <select bind:value={rad.enhet}>
+                    {#each (["kg","l","stk","pakke","dl","g"] as const) as e}<option value={e}>{e}</option>{/each}
+                  </select>
+                </td>
+                <td><button onclick={() => { kvRader = kvRader.filter((_,j) => j !== idx); }}>×</button></td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+        <button onclick={() => { kvRader = [...kvRader, { ingrediens: "", pris: "", enhet: "stk", forslag: [] }]; }}>+ Legg til rad</button>
+        <div class="modal-knapper">
+          <button onclick={() => { kvitteringApen = false; }}>Avbryt</button>
+          <button class="primær" onclick={async () => {
+            const gyldige = kvRader.filter(r => r.ingrediens.trim() && parseFloat(r.pris) > 0);
+            if (gyldige.length === 0) return;
+            priserPoster = await priserLeggTilFlere(gyldige.map(r => ({
+              ingrediens: r.ingrediens.trim(),
+              pris: parseFloat(r.pris),
+              enhet: r.enhet,
+              dato: kvDato,
+              butikk: kvButikk.trim() || undefined,
+            })));
+            kvitteringApen = false;
+            kvRader = [{ ingrediens: "", pris: "", enhet: "stk", forslag: [] }];
+            kvButikk = "";
+          }}>Bekreft kvittering</button>
         </div>
       </div>
     </div>
@@ -3058,4 +3222,29 @@
   .modal-knapper button.primær { background: var(--accent,#b5651d); color: white; border: none; border-radius: 4px; padding: 0.4rem 1rem; cursor: pointer; }
   .slett-knapp { margin-left: auto; background: none; border: none; cursor: pointer; opacity: 0.5; font-size: 1rem; }
   .slett-knapp:hover { opacity: 1; }
+
+  /* ── Priser ──────────────────────────────────────────────────────────────── */
+  .priser-visning { padding: 1rem; max-width: 700px; }
+  .priser-visning > input[type=search] { display: block; width: 100%; margin: 0.75rem 0; padding: 0.4rem 0.6rem; border: 1px solid var(--border,#ddd); border-radius: 4px; background: var(--card,#fff); color: inherit; }
+  .pris-rad { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--border,#eee); cursor: pointer; }
+  .pris-rad:hover { background: var(--card,#f9f9f9); }
+  .pris-navn { flex: 1; text-transform: capitalize; }
+  .pris-verdi { font-weight: bold; }
+  .pris-dato { font-size: 0.8rem; opacity: 0.6; }
+  .pris-chevron { margin-left: auto; opacity: 0.5; }
+  .pris-graf { width: 100%; height: 80px; margin: 0.5rem 0; }
+  .pris-historikk-liste { list-style: none; padding: 0; font-size: 0.9rem; }
+  .pris-historikk-liste li { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+  .kv-tabell { width: 100%; border-collapse: collapse; margin-bottom: 0.5rem; }
+  .kv-tabell th, .kv-tabell td { padding: 0.25rem; }
+  .kv-ingrediens-celle { position: relative; }
+  .kv-forslag { position: absolute; z-index: 10; background: var(--card,#fff); border: 1px solid var(--border,#ddd); border-radius: 4px; list-style: none; padding: 0; margin: 0; max-height: 150px; overflow-y: auto; min-width: 180px; }
+  .kv-forslag li { padding: 0.4rem 0.75rem; cursor: pointer; }
+  .kv-forslag li:hover { background: var(--border,#eee); }
+  .kv-header { display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap; }
+  .kv-header input { flex: 1; padding: 0.35rem 0.5rem; border: 1px solid var(--border,#ddd); border-radius: 4px; background: var(--card,#fff); color: inherit; }
+  .kvittering-modal { background: var(--card,#fff); padding: 1.5rem; border-radius: 8px; max-width: 600px; width: 95%; max-height: 90vh; overflow-y: auto; }
+  .ing-pris { font-size: 0.85rem; opacity: 0.7; margin-left: 0.5rem; }
+  .ingen-pris { opacity: 0.3; }
+  .handlesum { margin-top: 0.5rem; font-weight: bold; text-align: right; font-size: 0.95rem; }
 </style>
