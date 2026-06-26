@@ -2268,7 +2268,7 @@
           </div>
         {/if}
         <section class="detail-notat">
-          <div class="detail-notat-title">📝 {t("notes", lang)}</div>
+          <div class="detail-notat-title">📝 {t("notes_my", lang)}</div>
           <textarea
             class="detail-notat-felt"
             placeholder="Skriv ditt eget notat… (lagres automatisk)"

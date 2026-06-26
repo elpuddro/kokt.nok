@@ -37,13 +37,14 @@ const strings: Record<Lang, Record<string, string>> = {
     btn_close:           "Lukk",
     btn_delete:          "Slett",
     btn_add:             "Legg til",
-    servings:            "porsjoner",
+    servings:            "Porsjoner",
     minutes:             "min",
     no_results:          "Ingen oppskrifter funnet",
     unknown_recipe:      "Ukjent oppskrift",
     ingredients:         "Ingredienser",
     steps:               "Fremgangsmåte",
     notes:               "Notater",
+    notes_my:            "Mine notater",
     nutrition:           "Næring",
     price:               "Pris",
 
@@ -257,6 +258,7 @@ const strings: Record<Lang, Record<string, string>> = {
     ingredients:         "Ingredients",
     steps:               "Instructions",
     notes:               "Notes",
+    notes_my:            "My notes",
     nutrition:           "Nutrition",
     price:               "Price",
 
