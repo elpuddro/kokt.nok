@@ -1161,15 +1161,15 @@
       {#if currentKategori === "__innst__"}
         ⚙️ {t("btn_settings", lang)}
       {:else if currentKategori === "__handle__"}
-        🛒 Handleliste
+        🛒 {t("shopping_list", lang)}
       {:else if currentKategori === "__lager__"}
         🧊 Kjøleskap
       {:else if currentKategori === "__plan__"}
         📅 Matplan
       {:else if currentKategori === "__dagbok__"}
-        📖 Dagbok
+        📖 {t("diary_title", lang)}
       {:else if currentKategori === "__priser__"}
-        🏷️ Priser
+        🏷️ {t("prices_title", lang)}
       {:else if currentKategori === "__fav__"}
         ⭐ Favoritter
       {:else if currentKategori === "alle"}
@@ -1207,14 +1207,14 @@
       {#if handleliste.length === 0}
         <div class="empty-state">
           <div class="empty-icon">🛒</div>
-          <h3>Handlelista er tom</h3>
+          <h3>{t("shopping_empty", lang)}</h3>
           <p>Åpne en oppskrift og trykk «🛒 Legg i handleliste».</p>
         </div>
       {:else}
         <div class="handle-oppskrifter">
           <div class="handle-topp">
             <h2>Oppskrifter ({handleAgg.oppskrifter.length})</h2>
-            <button class="handle-tom" onclick={handleTøm}>🗑 Tøm handleliste</button>
+            <button class="handle-tom" onclick={handleTøm}>🗑 {t("shopping_clear", lang)}</button>
           </div>
           {#each handleAgg.oppskrifter as o (o.id)}
             <div class="handle-rad">
@@ -1256,7 +1256,7 @@
               return p ? sum + p.pris : sum;
             }, 0)}
             {#if totalPris > 0}
-              <div class="handlesum">Dine registrerte priser: ca. {totalPris.toFixed(0)} kr</div>
+              <div class="handlesum">{t("prices_title", lang)}: ca. {totalPris.toFixed(0)} {t("shopping_kr", lang)}</div>
             {/if}
           {/if}
         </div>
@@ -1574,8 +1574,9 @@
   {#if currentKategori === "__dagbok__"}
     <div class="dagbok-visning">
       <div class="dagbok-tabs">
-        {#each (['dag','uke','måned'] as const) as t}
-          <button class:aktiv={dagbokTab===t} onclick={() => dagbokTab=t}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+        {#each (['dag','uke','måned'] as const) as fane}
+          {@const faneLabel = fane === 'dag' ? t("diary_today", lang) : fane === 'uke' ? t("diary_week", lang) : t("diary_month", lang)}
+          <button class:aktiv={dagbokTab===fane} onclick={() => dagbokTab=fane}>{faneLabel}</button>
         {/each}
       </div>
 
@@ -1652,7 +1653,7 @@
               stroke="var(--text,#333)" stroke-dasharray="4 4" stroke-width="1" />
           {/if}
         </svg>
-        {#if snitt != null}<p>Snitt: {snitt} kcal/dag</p>{/if}
+        {#if snitt != null}<p>{t("diary_avg", lang)}: {snitt} {t("diary_kcal_suffix", lang)}/{t("diary_days", lang)}</p>{/if}
       {/if}
 
       <button class="logg-fab" onclick={() => { loggTidspunkt = tidspunktFraKlokkeslett(new Date().getHours()); loggModalApen = true; }}>+</button>
@@ -1666,8 +1667,8 @@
         const pad = (n: number) => String(n).padStart(2, '0');
         kvDato = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
         kvitteringApen = true;
-      }}>📋 Legg inn kvittering</button>
-      <input type="search" placeholder="Søk ingrediens..." bind:value={prisSearchTerm} />
+      }}>📋 {t("receipt_title", lang)}</button>
+      <input type="search" placeholder={t("prices_search", lang)} bind:value={prisSearchTerm} />
 
       {@const visIngr = unike_ingredienser(priserPoster).filter(n => !prisSearchTerm || n.includes(prisSearchTerm.toLowerCase()))}
       {#each visIngr as navn}
@@ -1711,7 +1712,7 @@
         {/if}
       {/each}
       {#if visIngr.length === 0}
-        <p class="ingen">Ingen priser registrert ennå. Legg inn kvittering for å komme i gang.</p>
+        <p class="ingen">{t("prices_empty", lang)}</p>
       {/if}
     </div>
   {/if}
@@ -1825,8 +1826,8 @@
         </label>
 
         <div class="modal-tabs">
-          <button class:aktiv={loggModalTab==='oppskrift'} onclick={() => loggModalTab='oppskrift'}>Fra oppskrift</button>
-          <button class:aktiv={loggModalTab==='fri'} onclick={() => loggModalTab='fri'}>Fri innføring</button>
+          <button class:aktiv={loggModalTab==='oppskrift'} onclick={() => loggModalTab='oppskrift'}>{t("diary_log_recipe", lang)}</button>
+          <button class:aktiv={loggModalTab==='fri'} onclick={() => loggModalTab='fri'}>{t("diary_log_free", lang)}</button>
         </div>
 
         {#if loggModalTab === 'oppskrift'}
@@ -1857,15 +1858,15 @@
             </ul>
           {/if}
         {:else}
-          <input type="text" placeholder="Beskrivelse (f.eks. 2 egg, stekt)" bind:value={loggFriBesk} />
-          <input type="number" placeholder="kcal (påkrevd)" bind:value={loggFriKcal} min="0" />
-          <input type="number" placeholder="Protein (g, valgfritt)" bind:value={loggFriProtein} min="0" />
-          <input type="number" placeholder="Fett (g, valgfritt)" bind:value={loggFriFett} min="0" />
-          <input type="number" placeholder="Karbohydrat (g, valgfritt)" bind:value={loggFriKarbo} min="0" />
+          <input type="text" placeholder={t("diary_description", lang)} bind:value={loggFriBesk} />
+          <input type="number" placeholder={t("diary_kcal", lang)} bind:value={loggFriKcal} min="0" />
+          <input type="number" placeholder={`${t("diary_protein", lang)} (${t("diary_g_suffix", lang)})`} bind:value={loggFriProtein} min="0" />
+          <input type="number" placeholder={`${t("diary_fat", lang)} (${t("diary_g_suffix", lang)})`} bind:value={loggFriFett} min="0" />
+          <input type="number" placeholder={`${t("diary_carbs", lang)} (${t("diary_g_suffix", lang)})`} bind:value={loggFriKarbo} min="0" />
         {/if}
 
         <div class="modal-knapper">
-          <button onclick={() => loggModalApen = false}>Avbryt</button>
+          <button onclick={() => loggModalApen = false}>{t("btn_cancel", lang)}</button>
           <button class="primær" onclick={async () => {
             const dato = dagbokValgtDato;
             let nyPost: Loggpost;
@@ -1883,7 +1884,7 @@
             loggModalApen = false;
             loggValgtOppskrift = null; loggSøk = ""; loggPorsjoner = 1;
             loggFriBesk = ""; loggFriKcal = null; loggFriProtein = null; loggFriFett = null; loggFriKarbo = null;
-          }}>Logg</button>
+          }}>{t("diary_save", lang)}</button>
         </div>
       </div>
     </div>
@@ -1892,13 +1893,13 @@
   {#if kvitteringApen}
     <div class="modal-bakgrunn" role="presentation" onclick={() => { kvitteringApen = false; }}>
       <div class="kvittering-modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
-        <div class="modal-tittel">Legg inn kvittering</div>
+        <div class="modal-tittel">{t("receipt_title", lang)}</div>
         <div class="kv-header">
           <input type="date" bind:value={kvDato} />
-          <input type="text" placeholder="Butikk (valgfritt)" bind:value={kvButikk} />
+          <input type="text" placeholder={t("receipt_store", lang)} bind:value={kvButikk} />
         </div>
         <table class="kv-tabell">
-          <thead><tr><th>Ingrediens</th><th>Pris (kr)</th><th>Enhet</th><th></th></tr></thead>
+          <thead><tr><th>{t("receipt_ingredient", lang)}</th><th>{t("receipt_price", lang)}</th><th>{t("receipt_unit", lang)}</th><th></th></tr></thead>
           <tbody>
             {#each kvRader as rad, idx}
               <tr>
@@ -1910,7 +1911,7 @@
                       } else { rad.forslag = []; }
                       kvRader = [...kvRader];
                     }}
-                    placeholder="Ingrediens" />
+                    placeholder={t("receipt_ingredient", lang)} />
                   {#if rad.forslag.length > 0}
                     <ul class="kv-forslag">
                       {#each rad.forslag.slice(0,6) as f}
@@ -1936,9 +1937,9 @@
             {/each}
           </tbody>
         </table>
-        <button onclick={() => { kvRader = [...kvRader, { ingrediens: "", pris: "", enhet: "stk", forslag: [] }]; }}>+ Legg til rad</button>
+        <button onclick={() => { kvRader = [...kvRader, { ingrediens: "", pris: "", enhet: "stk", forslag: [] }]; }}>{t("receipt_add_row", lang)}</button>
         <div class="modal-knapper">
-          <button onclick={() => { kvitteringApen = false; }}>Avbryt</button>
+          <button onclick={() => { kvitteringApen = false; }}>{t("btn_cancel", lang)}</button>
           <button class="primær" onclick={async () => {
             const gyldige = kvRader.filter(r => r.ingrediens.trim() && parseFloat(r.pris) > 0);
             const ufullstendige = kvRader.filter(r => (r.ingrediens.trim() || parseFloat(r.pris) > 0) && !(r.ingrediens.trim() && parseFloat(r.pris) > 0));
@@ -1956,7 +1957,7 @@
             kvitteringApen = false;
             kvRader = [{ ingrediens: "", pris: "", enhet: "stk", forslag: [] }];
             kvButikk = "";
-          }}>Bekreft kvittering</button>
+          }}>{t("receipt_save", lang)}</button>
         </div>
       </div>
     </div>
