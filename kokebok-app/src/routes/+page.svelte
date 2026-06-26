@@ -217,7 +217,7 @@
     try {
       if (currentKategori === "__fav__") {
         const liste: any[] = await invoke("hent_oppskrifter_by_ids", {
-          ids: [...favoritter],
+          ids: [...favoritter], lang,
         });
         if (seq !== fetchSeq) return;
         oppskrifter = liste;
@@ -225,7 +225,7 @@
         side = 1;
       } else {
         const data: any = await invoke("hent_oppskrifter", {
-          kategori: currentKategori, sok, side, perSide, dietter: aktiveDietter, sorter,
+          kategori: currentKategori, sok, side, perSide, dietter: aktiveDietter, sorter, lang,
         });
         if (seq !== fetchSeq) return;
         total = data.total;
@@ -438,6 +438,7 @@
         typer: [],
         nattFilter: false,
         hoytid: aktivHoytid,
+        lang,
       });
     } else {
       const sone = nåværendeTidssone();
@@ -448,6 +449,7 @@
         typer: sone.typer,
         nattFilter,
         hoytid: null,
+        lang,
       });
     }
   }
@@ -475,6 +477,7 @@
         laaste: samleLaaste(),
         sunnPlan: aktivtMidjeFilter,
         hoytid: planSesong && aktivHoytid ? aktivHoytid : null,
+        lang,
       });
       plan = uke;
     } catch (e) {
@@ -543,7 +546,7 @@
     lagerForslagTimer = setTimeout(async () => {
       if (lager.length === 0) { lagerForslag = []; return; }
       try {
-        lagerForslag = await invoke("hva_kan_jeg_lage", { varer: lager.map((v) => v.navn) });
+        lagerForslag = await invoke("hva_kan_jeg_lage", { varer: lager.map((v) => v.navn), lang });
       } catch (e) { console.error("hva_kan_jeg_lage feilet:", e); lagerForslag = []; }
     }, 300);
   }
@@ -554,7 +557,7 @@
     const p = nyVareNavn.trim();
     if (p.length < 2) { autoForslag = []; return; }
     autoTimer = setTimeout(async () => {
-      try { autoForslag = await invoke("ingrediens_forslag", { prefiks: p }); }
+      try { autoForslag = await invoke("ingrediens_forslag", { prefiks: p, lang }); }
       catch (e) { console.error(e); autoForslag = []; }
     }, 200);
   }
@@ -649,7 +652,7 @@
       const poster: { opp: any; porsjoner: number }[] = [];
       for (const p of handleliste) {
         try {
-          const opp: any = await invoke("hent_oppskrift", { id: p.id });
+          const opp: any = await invoke("hent_oppskrift", { id: p.id, lang });
           if (opp) poster.push({ opp, porsjoner: p.porsjoner });
         } catch (err) {
           console.error("hent_oppskrift i handleliste feilet:", p.id, err);
@@ -711,7 +714,7 @@
   async function åpneOppskrift(id: number) {
     loading = true;
     try {
-      const opp: any = await invoke("hent_oppskrift", { id });
+      const opp: any = await invoke("hent_oppskrift", { id, lang });
       if (!opp) return;
       currentOppskrift = opp;
       portioner = opp.porsjoner ?? 4;
@@ -1915,7 +1918,7 @@
                   <input type="text" bind:value={rad.ingrediens}
                     oninput={async () => {
                       if (rad.ingrediens.length >= 2) {
-                        rad.forslag = await invoke<string[]>("sok_ingredienser", { q: rad.ingrediens });
+                        rad.forslag = await invoke<string[]>("sok_ingredienser", { q: rad.ingrediens, lang });
                       } else { rad.forslag = []; }
                       kvRader = [...kvRader];
                     }}
