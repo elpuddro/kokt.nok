@@ -177,10 +177,7 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     58× raskere enn LIKE (0.2ms vs 11.6ms). Fanger 1–2 bokstavs-avvik.
     Skript: `scripts/bygg_fts.py`. Rust: `fts_ids_for_ord()` i `lib.rs`.
 
-28. **Oppskrift-deling** (kun Android + åpen Windows/Linux-utgave, ikke fengselsutgaven) —
-    eksporter én oppskrift som formatert tekst/PDF og åpne Android share-sheet via
-    Tauri `share`-plugin. På desktop: kopier til utklippstavle eller eksporter som
-    tekstfil. Nyttig for å sende oppskrifter til familie/venner. **Ikke startet.**
+~~28. **Oppskrift-deling**~~ — ✅ **FERDIG 2026-06-26.** Formatert tekst kopieres til utklippstavle (desktop) eller deles via system share-sheet (Android). Skjult i fengselsutgaven via VITE_UTGAVE=fengsel.
 
 29. **Kaloriregnskap per dag** — enkel dagsoversikt der brukeren logger hva de har
     spist (velger fra oppskrifter eller matvarer), og ser fremgang mot kcal-/makro-
