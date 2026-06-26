@@ -35,7 +35,8 @@ export function loggKcalPerDag(poster: Loggpost[], næring: Næringmap, antallDa
   for (let i = antallDager - 1; i >= 0; i--) {
     const d = new Date(idag);
     d.setDate(d.getDate() - i);
-    const dato = d.toISOString().slice(0, 10);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const dato = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     const dagPoster = loggForDato(poster, dato);
     result.push({ dato, kcal: loggSumNæring(dagPoster, næring).kcal });
   }
