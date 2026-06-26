@@ -3027,6 +3027,10 @@
   .pynt-toggle.deaktivert { opacity: 0.4; cursor: not-allowed; }
 
   /* ── Dagbok ────────────────────────────────────────────────────────────────── */
+  .modal-bakgrunn {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
   .dagbok-visning { padding: 1rem; max-width: 700px; }
   .dagbok-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
   .dagbok-tabs button.aktiv { font-weight: bold; border-bottom: 2px solid currentColor; }
