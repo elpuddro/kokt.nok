@@ -104,7 +104,7 @@
   let loggFriProtein = $state<number | null>(null);
   let loggFriFett = $state<number | null>(null);
   let loggFriKarbo = $state<number | null>(null);
-  let næringMap = $state<Record<number, { kcal: number; protein: number; fett: number; karbo: number }>>({});
+  let næringMap = $state<Record<number, { kcal: number; protein: number; fett: number; karbo: number; navn: string }>>({});
 
   // ── Tidsbasert forside ────────────────────────────────────────────────────────
   interface ForsideOppskrift { id: number; navn: string; tid: string | null; bilde: string | null }
@@ -320,12 +320,13 @@
       if (næringMap[id]) continue;
       try {
         const o = await invoke<any>("hent_oppskrift", { id });
-        if (o?.naering) {
+        if (o) {
           næringMap[id] = {
-            kcal: o.naering.energi ?? 0,
-            protein: o.naering.protein ?? 0,
-            fett: o.naering.fett ?? 0,
-            karbo: o.naering.karbohydrat ?? 0,
+            kcal: o.naering?.energi ?? 0,
+            protein: o.naering?.protein ?? 0,
+            fett: o.naering?.fett ?? 0,
+            karbo: o.naering?.karbohydrat ?? 0,
+            navn: (o as any).navn ?? 'Ukjent oppskrift',
           };
         }
       } catch { /* slettet oppskrift — næring forblir udefinert → 0 */ }
@@ -1518,9 +1519,7 @@
                 <div class="dagbok-post">
                   <span>
                     {#if p.type === 'oppskrift'}
-                      {#await invoke('hent_oppskrift', { id: p.oppskriftId }) then o}
-                        {(o as any)?.navn ?? 'Ukjent oppskrift'} × {p.porsjoner}
-                      {/await}
+                      {næringMap[p.oppskriftId]?.navn ?? 'Ukjent oppskrift'} × {p.porsjoner}
                     {:else}
                       {p.beskrivelse}
                     {/if}
@@ -1561,26 +1560,25 @@
         {@const data = loggKcalPerDag(dagbokPoster, næringMap, dager)}
         {@const behovKcal = aktivProfil ? dagsbehov(aktivProfil).kcal : 0}
         {@const maxKcal = Math.max(...data.map(d => d.kcal), behovKcal, 100)}
-        {@const snitt = dagbokTab === 'måned' ? Math.round(data.reduce((s,d)=>s+d.kcal,0)/dager) : null}
+        {@const snitt = dagbokTab === 'måned' ? Math.round(data.reduce((s,d)=>s+d.kcal,0) / (data.filter(d => d.kcal > 0).length || 1)) : null}
         <svg viewBox="0 0 {dager*24} 160" class="kcal-graf">
           {#each data as d, i}
             {@const h = Math.round((d.kcal / maxKcal) * 130)}
             <rect x={i*24+2} y={160-h} width="20" height={h}
-              fill="var(--farge-primær, #b5651d)"
+              fill="var(--accent, #b5651d)"
               onclick={() => { dagbokTab = 'dag'; dagbokValgtDato = d.dato; }}
-              style="cursor:pointer" />
-            <title>{d.dato}: {d.kcal} kcal</title>
+              style="cursor:pointer"><title>{d.dato}: {d.kcal} kcal</title></rect>
           {/each}
           {#if aktivProfil}
             {@const behovY = 160 - Math.round((dagsbehov(aktivProfil).kcal / maxKcal) * 130)}
             <line x1="0" y1={behovY} x2={dager*24} y2={behovY}
-              stroke="var(--farge-tekst,#333)" stroke-dasharray="4 4" stroke-width="1" />
+              stroke="var(--text,#333)" stroke-dasharray="4 4" stroke-width="1" />
           {/if}
         </svg>
         {#if snitt != null}<p>Snitt: {snitt} kcal/dag</p>{/if}
       {/if}
 
-      <button class="logg-fab" onclick={() => loggModalApen = true}>+</button>
+      <button class="logg-fab" onclick={() => { loggTidspunkt = tidspunktFraKlokkeslett(new Date().getHours()); loggModalApen = true; }}>+</button>
     </div>
   {/if}
 
@@ -2369,14 +2367,14 @@
   .del-knapp {
     padding: 0.4rem 0.8rem;
     border-radius: var(--radius);
-    border: 1px solid var(--farge-kant, #ddd);
+    border: 1px solid var(--border, #ddd);
     background: var(--bg-warm);
     cursor: pointer;
     font-size: 0.9rem;
     transition: background 0.2s;
   }
   .del-knapp:hover {
-    background: var(--farge-kant, #eee);
+    background: var(--border, #eee);
   }
   .detail-handle {
     border: 1px solid var(--border);
@@ -3038,26 +3036,26 @@
   .dagbok-seksjon h3 { font-size: 0.9rem; text-transform: uppercase; opacity: 0.6; margin-bottom: 0.25rem; }
   .dagbok-post { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
   .dagbok-post .kcal { margin-left: auto; opacity: 0.7; font-size: 0.9rem; }
-  .dagbok-sum { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--farge-kant, #ddd); }
-  .fremgangsbar-wrap { height: 8px; background: var(--farge-kant,#eee); border-radius: 4px; margin: 0.5rem 0; }
+  .dagbok-sum { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border, #ddd); }
+  .fremgangsbar-wrap { height: 8px; background: var(--border,#eee); border-radius: 4px; margin: 0.5rem 0; }
   .fremgangsbar { height: 8px; border-radius: 4px; transition: width 0.3s; }
   .logg-fab { position: fixed; bottom: 2rem; right: 2rem; width: 3rem; height: 3rem;
-    border-radius: 50%; font-size: 1.5rem; background: var(--farge-primær,#b5651d);
+    border-radius: 50%; font-size: 1.5rem; background: var(--accent,#b5651d);
     color: white; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
   .kcal-graf { width: 100%; height: 160px; }
-  .logg-modal { background: var(--farge-flate,#fff); padding: 1.5rem; border-radius: 8px;
+  .logg-modal { background: var(--card,#fff); padding: 1.5rem; border-radius: 8px;
     max-width: 480px; width: 90%; display: flex; flex-direction: column; gap: 0.75rem; }
-  .logg-søk-liste { list-style: none; padding: 0; margin: 0; border: 1px solid var(--farge-kant,#ddd); border-radius: 4px; }
+  .logg-søk-liste { list-style: none; padding: 0; margin: 0; border: 1px solid var(--border,#ddd); border-radius: 4px; }
   .logg-søk-liste li { padding: 0.5rem; cursor: pointer; }
-  .logg-søk-liste li:hover { background: var(--farge-kant,#eee); }
-  .logg-valgt { padding: 0.5rem; border: 1px solid var(--farge-primær,#b5651d); border-radius: 4px; }
+  .logg-søk-liste li:hover { background: var(--border,#eee); }
+  .logg-valgt { padding: 0.5rem; border: 1px solid var(--accent,#b5651d); border-radius: 4px; }
   .porsjon-kontroll { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; }
   .ingen { opacity: 0.5; font-style: italic; font-size: 0.9rem; }
   .modal-tittel { font-size: 1.1rem; font-weight: bold; }
   .modal-tabs { display: flex; gap: 0.5rem; }
   .modal-tabs button.aktiv { font-weight: bold; border-bottom: 2px solid currentColor; }
   .modal-knapper { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
-  .modal-knapper button.primær { background: var(--farge-primær,#b5651d); color: white; border: none; border-radius: 4px; padding: 0.4rem 1rem; cursor: pointer; }
+  .modal-knapper button.primær { background: var(--accent,#b5651d); color: white; border: none; border-radius: 4px; padding: 0.4rem 1rem; cursor: pointer; }
   .slett-knapp { margin-left: auto; background: none; border: none; cursor: pointer; opacity: 0.5; font-size: 1rem; }
   .slett-knapp:hover { opacity: 1; }
 </style>
