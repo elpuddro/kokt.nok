@@ -769,7 +769,7 @@ fn er_staple(navn_lower: &str) -> bool {
 }
 
 #[tauri::command]
-fn ingrediens_forslag(app: AppHandle, prefiks: String) -> Result<Vec<String>, String> {
+fn ingrediens_forslag(app: AppHandle, prefiks: String, lang: Option<String>) -> Result<Vec<String>, String> {
     let p = prefiks.trim().to_lowercase();
     if p.len() < 2 {
         return Ok(vec![]);
@@ -778,9 +778,11 @@ fn ingrediens_forslag(app: AppHandle, prefiks: String) -> Result<Vec<String>, St
     // Prioriter de som STARTER med prefikset, så de som inneholder det.
     let mut stmt = conn
         .prepare(
-            "SELECT DISTINCT navn FROM ingredienser \
-             WHERE navn IS NOT NULL AND LOWER(navn) LIKE ?1 \
-             ORDER BY CASE WHEN LOWER(navn) LIKE ?2 THEN 0 ELSE 1 END, navn COLLATE NOCASE \
+            "SELECT DISTINCT COALESCE(navn_en, navn) AS navn FROM ingredienser \
+             WHERE navn IS NOT NULL \
+               AND (LOWER(COALESCE(navn_en, navn)) LIKE ?1 OR LOWER(navn) LIKE ?1) \
+             ORDER BY CASE WHEN LOWER(COALESCE(navn_en, navn)) LIKE ?2 THEN 0 ELSE 1 END, \
+                      COALESCE(navn_en, navn) COLLATE NOCASE \
              LIMIT 10",
         )
         .map_err(|e| e.to_string())?;
@@ -823,7 +825,7 @@ struct Forslag {
 }
 
 #[tauri::command]
-fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, String> {
+fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>, lang: Option<String>) -> Result<Vec<Forslag>, String> {
     let varer: Vec<String> = varer.iter().map(|v| v.trim().to_lowercase()).filter(|v| !v.is_empty()).collect();
     if varer.is_empty() {
         return Ok(vec![]);
@@ -831,7 +833,8 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>) -> Result<Vec<Forslag>, 
     let conn = open(&app)?;
     let mut stmt = conn
         .prepare(
-            "SELECT o.id, o.navn, o.type, i.navn \
+            "SELECT o.id, COALESCE(o.navn_en, o.navn) AS navn, o.type, \
+                    COALESCE(i.navn_en, i.navn) AS inavn \
              FROM oppskrifter o JOIN ingredienser i ON i.oppskrift_id = o.id \
              WHERE i.navn IS NOT NULL AND i.navn != '' \
              AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
