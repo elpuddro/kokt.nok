@@ -179,10 +179,11 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
 
 ~~28. **Oppskrift-deling**~~ — ✅ **FERDIG 2026-06-26.** Formatert tekst kopieres til utklippstavle (desktop) eller deles via system share-sheet (Android). Skjult i fengselsutgaven via VITE_UTGAVE=fengsel.
 
-29. **Kaloriregnskap per dag** — enkel dagsoversikt der brukeren logger hva de har
-    spist (velger fra oppskrifter eller matvarer), og ser fremgang mot kcal-/makro-
-    målet fra helseprofilen (#20). Persistert i Tauri Store. Ingen AI.
-    **Ikke startet.**
+~~29. **Kaloriregnskap per dag**~~ — ✅ **FERDIG 2026-06-26.** Dagbok-visning med
+    dag/uke/måned-tabs, logg-modal for oppskrifter og fri innføring, SVG-stolpegraf,
+    fremgangsbar mot dagsbehov fra helseprofil. Persistert i Tauri Store. Ingen AI.
+    Spec: `docs/superpowers/specs/2026-06-26-kaloriregnskap-design.md`.
+    Plan: `docs/superpowers/plans/2026-06-26-kaloriregnskap.md`.
 
 30. **Manuell prisregistrering + historikk** — brukeren legger inn pris per ingrediens
     manuelt (f.eks. fra kvittering), med dato og butikk (valgfritt). Historikk vises
