@@ -1627,7 +1627,12 @@
 
   {#if currentKategori === "__priser__"}
     <div class="priser-visning">
-      <button class="primær" onclick={() => { kvitteringApen = true; }}>📋 Legg inn kvittering</button>
+      <button class="primær" onclick={() => {
+        const now = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        kvDato = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+        kvitteringApen = true;
+      }}>📋 Legg inn kvittering</button>
       <input type="search" placeholder="Søk ingrediens..." bind:value={prisSearchTerm} />
 
       {@const visIngr = unike_ingredienser(priserPoster).filter(n => !prisSearchTerm || n.includes(prisSearchTerm.toLowerCase()))}
@@ -1662,7 +1667,7 @@
             </svg>
           {/if}
           <ul class="pris-historikk-liste">
-            {#each [...prisHistorikk(navn, priserPoster)].reverse() as h}
+            {#each [...hist].reverse() as h}
               <li>
                 {h.dato} — {h.pris.toFixed(2)} kr/{h.enhet}{h.butikk ? ` · ${h.butikk}` : ''}
                 <button onclick={async (e) => { e.stopPropagation(); priserPoster = await prisSlett(h.id); }}>×</button>
@@ -1902,6 +1907,10 @@
           <button onclick={() => { kvitteringApen = false; }}>Avbryt</button>
           <button class="primær" onclick={async () => {
             const gyldige = kvRader.filter(r => r.ingrediens.trim() && parseFloat(r.pris) > 0);
+            const ufullstendige = kvRader.filter(r => (r.ingrediens.trim() || parseFloat(r.pris) > 0) && !(r.ingrediens.trim() && parseFloat(r.pris) > 0));
+            if (ufullstendige.length > 0) {
+              alert(`${ufullstendige.length} rad(er) mangler ingrediens eller pris og ble ikke lagret.`);
+            }
             if (gyldige.length === 0) return;
             priserPoster = await priserLeggTilFlere(gyldige.map(r => ({
               ingrediens: r.ingrediens.trim(),
