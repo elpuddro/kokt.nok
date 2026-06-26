@@ -363,6 +363,7 @@ fn hent_oppskrifter(
     #[allow(non_snake_case)] perSide: Option<i64>,
     dietter: Option<Vec<String>>,
     sorter: Option<String>,
+    lang: Option<String>,
 ) -> Result<ListeSvar, String> {
     let conn = open(&app)?;
     let side = side.unwrap_or(1).max(1);
@@ -412,10 +413,12 @@ fn hent_oppskrifter(
             for ord in s.split_whitespace().take(5) {
                 let like = format!("%{ord}%");
                 owned.push(like.clone());
+                owned.push(like.clone());
+                owned.push(like.clone());
                 owned.push(like);
                 conds.push(
-                    "(o.navn LIKE ? OR EXISTS (SELECT 1 FROM ingredienser i \
-                     WHERE i.oppskrift_id = o.id AND i.navn LIKE ?))",
+                    "(COALESCE(o.navn_en, o.navn) LIKE ? OR o.navn LIKE ? OR EXISTS (SELECT 1 FROM ingredienser i \
+                     WHERE i.oppskrift_id = o.id AND (COALESCE(i.navn_en, i.navn) LIKE ? OR i.navn LIKE ?)))",
                 );
             }
         }
@@ -468,7 +471,7 @@ fn hent_oppskrifter(
         _           => "o.navn COLLATE NOCASE ASC".to_string(),
     };
     let list_sql = format!(
-        "SELECT o.id, o.slug, o.navn, o.type, o.porsjoner, o.tid, o.bilde
+        "SELECT o.id, o.slug, COALESCE(o.navn_en, o.navn) AS navn, o.type, o.porsjoner, o.tid, o.bilde
          FROM   oppskrifter o {where_sql}
          ORDER  BY {order}
          LIMIT  ? OFFSET ?"
