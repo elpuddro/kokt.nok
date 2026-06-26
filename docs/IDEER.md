@@ -213,3 +213,13 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     varsle brukeren diskret når en ny versjon er tilgjengelig på GitHub Releases,
     med lenke til nedlasting. Ingen auto-oppdatering, kun informasjon.
     **Ikke startet.**
+
+36. **Sudokøkken** (easter egg) — Sudoku med mattema. Navn på celler/blokker
+    inspirert av kjøkken og ingredienser (f.eks. 3×3-blokk kalles «gryte»,
+    feil tall = «brent»). Klassisk 9×9-brett, tre vanskelighetsgrader, ingen
+    ekstern data. Skjult bak kodenavn/hemmelig navigering. **Ikke startet.**
+
+37. **Kokkeduellen** (easter egg) — blindtest-quiz: vis ingrediensliste fra en
+    tilfeldig oppskrift i DB, gjett hva retten heter. Fire svaralternativer,
+    poeng for riktig svar og hastighet, highscore i Tauri Store. Null ekstra
+    data — henter rett fra eksisterende oppskrifter. **Ikke startet.**
