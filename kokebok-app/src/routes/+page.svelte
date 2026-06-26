@@ -1267,9 +1267,9 @@
   {#if currentKategori === "__innst__"}
     <div id="innst-wrap">
       <div class="innst-faner">
-        <button class:aktiv-fane={innstFane === "tema"} onclick={() => (innstFane = "tema")}>🎨 Temaer</button>
-        <button class:aktiv-fane={innstFane === "diett"} onclick={() => (innstFane = "diett")}>🍽️ Kosthold</button>
-        <button class:aktiv-fane={innstFane === "profil"} onclick={() => (innstFane = "profil")}>👤 Helseprofil</button>
+        <button class:aktiv-fane={innstFane === "tema"} onclick={() => (innstFane = "tema")}>{t("settings_themes", lang)}</button>
+        <button class:aktiv-fane={innstFane === "diett"} onclick={() => (innstFane = "diett")}>{t("settings_diet", lang)}</button>
+        <button class:aktiv-fane={innstFane === "profil"} onclick={() => (innstFane = "profil")}>{t("settings_profile", lang)}</button>
         <button class:aktiv-fane={innstFane === "spraak"} onclick={() => (innstFane = "spraak")}>🌐 {t("settings_language", lang)}</button>
       </div>
       {#if innstFane === "tema"}
@@ -1456,10 +1456,10 @@
             {/if}
           </div>
           <input class="lager-dato" type="date" bind:value={nyVareUtloper} title="Utløpsdato (valgfritt)" />
-          <button class="lager-legg" onclick={() => leggTilVare()}>Legg til</button>
+          <button class="lager-legg" onclick={() => leggTilVare()}>{t("inventory_add", lang)}</button>
         </div>
         {#if lager.length === 0}
-          <p class="lager-tom">Ingen varer registrert ennå.</p>
+          <p class="lager-tom">{t("inventory_empty", lang)}</p>
         {:else}
           <ul class="lager-liste">
             {#each lager as v (v.navn)}
@@ -1477,11 +1477,11 @@
         {/if}
       </section>
       <section class="lager-forslag">
-        <h2>Hva kan jeg lage?</h2>
+        <h2>{t("inventory_what_can", lang)}</h2>
         {#if lager.length === 0}
           <p class="lager-tom">Legg til varer over for å se forslag.</p>
         {:else if lagerForslag.length === 0}
-          <p class="lager-tom">Ingen treff på det du har registrert.</p>
+          <p class="lager-tom">{t("inventory_no_match", lang)}</p>
         {:else}
           {#each [...new Set(lagerForslag.map((f) => f.totalt - f.dekket))].sort((a, b) => a - b) as mangelN}
             <div class="forslag-gruppe-tittel">
@@ -1508,7 +1508,7 @@
         <label>Dagsmål (kcal)
           <input type="number" min="800" max="5000" step="50" bind:value={planDagsmaal} />
         </label>
-        <label>Personer
+        <label>{t("meal_plan_people", lang)}
           <input type="number" min="1" max="12" step="1" bind:value={planPersoner} />
         </label>
         {#if aktiveDietter.length > 0}
@@ -1518,10 +1518,10 @@
           <input type="checkbox" bind:checked={planSesong}
                  disabled={!aktivHoytid}
                  onchange={onPlanSesongChange} />
-          Sesongmeny
+          {t("meal_plan_seasonal", lang)}
         </label>
         <button class="plan-generer" onclick={genererPlan} disabled={planLaster}>
-          {planLaster ? "Genererer…" : "↻ Generer"}
+          {planLaster ? "Genererer…" : `↻ ${t("meal_plan_generate", lang)}`}
         </button>
       </div>
 
@@ -1531,7 +1531,7 @@
         <table class="plan-tabell">
           <thead>
             <tr>
-              <th></th><th>🍳 Frokost</th><th>🥪 Lunsj</th><th>🍽️ Middag</th><th>🌙 Kveldsmat</th><th>kcal/dag</th>
+              <th></th><th>🍳 Frokost</th><th>🥪 Lunsj</th><th>🍽️ Middag</th><th>🌙 Kveldsmat</th><th>{t("meal_plan_kcal", lang)}</th>
             </tr>
           </thead>
           <tbody>
@@ -1564,7 +1564,7 @@
         </table>
         <div class="plan-knapper">
           <button class="plan-generer" onclick={genererPlan} disabled={planLaster}>↻ Generer ulåste på nytt</button>
-          <button class="plan-handle" onclick={sendUkaTilHandleliste}>🛒 Send uka til handleliste</button>
+          <button class="plan-handle" onclick={sendUkaTilHandleliste}>🛒 {t("meal_plan_send_list", lang)}</button>
           <button class="plan-lagre" onclick={lagreUka}>💾 Lagre uka</button>
         </div>
       {/if}
@@ -1819,9 +1819,11 @@
 
         <label>Tidspunkt
           <select bind:value={loggTidspunkt}>
-            {#each (['frokost','lunsj','middag','kveldsmat','annet'] as const) as t}
-              <option value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
-            {/each}
+            <option value="frokost">{t("meal_breakfast", lang)}</option>
+            <option value="lunsj">{t("meal_lunch", lang)}</option>
+            <option value="middag">{t("meal_dinner", lang)}</option>
+            <option value="kveldsmat">{t("meal_supper", lang)}</option>
+            <option value="annet">{t("meal_other", lang)}</option>
           </select>
         </label>
 
