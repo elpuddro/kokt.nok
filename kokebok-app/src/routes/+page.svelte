@@ -19,6 +19,8 @@
   import { kopiFraOppskrift, beregnDiff, type OppskriftKopi, type KopiIngrediens, type KopiTrinn, type VersjonSnapshot } from "$lib/versjoner-logikk";
   import Hoytidspynt from "$lib/Hoytidspynt.svelte";
   import { formaterOppskrift } from "$lib/deling";
+  import { loggLast, loggLeggTil, loggFjern, type Loggpost, type MåltidTidspunkt } from "$lib/matvarelogg";
+  import { loggForDato, tidspunktFraKlokkeslett, loggSumNæring, loggKcalPerDag } from "$lib/matvarelogg-logikk";
 
   // ── Kategori-emojier ─────────────────────────────────────────────────────────
   const EMOJI: Record<string, string> = {
@@ -85,6 +87,24 @@
   let lagreModalApen = $state(false);
   let lagreLabel = $state("");
   let kladdTimer: any = null;
+
+  // ── Dagbok (kaloriregnskap) ───────────────────────────────────────────────────
+  let dagbokPoster = $state<Loggpost[]>([]);
+  let dagbokValgtDato = $state<string>(new Date().toISOString().slice(0, 10));
+  let dagbokTab = $state<"dag" | "uke" | "måned">("dag");
+  let loggModalApen = $state(false);
+  let loggModalTab = $state<"oppskrift" | "fri">("oppskrift");
+  let loggTidspunkt = $state<MåltidTidspunkt>(tidspunktFraKlokkeslett(new Date().getHours()));
+  let loggSøk = $state("");
+  let loggSøkResultater = $state<any[]>([]);
+  let loggValgtOppskrift = $state<any>(null);
+  let loggPorsjoner = $state(1);
+  let loggFriBesk = $state("");
+  let loggFriKcal = $state<number | null>(null);
+  let loggFriProtein = $state<number | null>(null);
+  let loggFriFett = $state<number | null>(null);
+  let loggFriKarbo = $state<number | null>(null);
+  let næringMap = $state<Record<number, { kcal: number; protein: number; fett: number; karbo: number }>>({});
 
   // ── Tidsbasert forside ────────────────────────────────────────────────────────
   interface ForsideOppskrift { id: number; navn: string; tid: string | null; bilde: string | null }
@@ -283,6 +303,34 @@
     side = 1;
     sok = "";
     oppskrifter = [];
+  }
+
+  function velgDagbok() {
+    currentKategori = "__dagbok__";
+    side = 1;
+    sok = "";
+    oppskrifter = [];
+  }
+
+  async function oppdaterNæringMap(poster: Loggpost[]) {
+    const ids = [...new Set(
+      poster.filter(p => p.type === "oppskrift").map(p => (p as any).oppskriftId)
+    )];
+    for (const id of ids) {
+      if (næringMap[id]) continue;
+      try {
+        const o = await invoke<any>("hent_oppskrift", { id });
+        if (o?.naering) {
+          næringMap[id] = {
+            kcal: o.naering.energi ?? 0,
+            protein: o.naering.protein ?? 0,
+            fett: o.naering.fett ?? 0,
+            karbo: o.naering.karbohydrat ?? 0,
+          };
+        }
+      } catch { /* slettet oppskrift — næring forblir udefinert → 0 */ }
+    }
+    næringMap = { ...næringMap }; // trigger reaktivitet
   }
 
   async function velgProfilAktiv(id: string) {
@@ -919,6 +967,8 @@
     const innstStore = await load("innstillinger.json");
     pynt = (await innstStore.get<boolean>("pynt")) ?? false;
     await lastForside();
+    dagbokPoster = await loggLast();
+    await oppdaterNæringMap(dagbokPoster);
   });
 
   onDestroy(() => {
@@ -970,7 +1020,7 @@
     {/if}
   </div>
 
-  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
+  {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
     <div class="search-wrap">
       <span class="search-icon">🔍</span>
       <input
@@ -1031,6 +1081,14 @@
     </button>
     <button
       class="kat-btn"
+      class:active={currentKategori === "__dagbok__"}
+      onclick={velgDagbok}
+    >
+      <span class="kat-emoji">📖</span>
+      <span class="kat-navn">Dagbok</span>
+    </button>
+    <button
+      class="kat-btn"
       class:active={currentKategori === "__innst__"}
       onclick={velgInnstillinger}
     >
@@ -1064,6 +1122,8 @@
         🧊 Kjøleskap
       {:else if currentKategori === "__plan__"}
         📅 Matplan
+      {:else if currentKategori === "__dagbok__"}
+        📖 Dagbok
       {:else if currentKategori === "__fav__"}
         ⭐ Favoritter
       {:else if currentKategori === "alle"}
@@ -1072,7 +1132,7 @@
         {currentKategori}
       {/if}
     </h1>
-    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
     <span id="header-antall" class="count-badge">
       {#if currentKategori === "__handle__"}
         {handleliste.length} oppskrifter
@@ -1081,12 +1141,12 @@
       {/if}
     </span>
     {/if}
-    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
+    {#if aktiveDietter.length > 0 && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
       <button class="diett-pille" onclick={() => (currentKategori = "__innst__")}>
         🍽️ {aktiveDietter.length} {aktiveDietter.length === 1 ? "filter" : "filtre"} aktive
       </button>
     {/if}
-    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__handle__" && currentKategori !== "__fav__"}
+    {#if currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__handle__" && currentKategori !== "__fav__" && currentKategori !== "__dagbok__"}
       <select class="sorter-select" bind:value={sorter} onchange={onSorterChange}>
         <option value="navn_asc">Navn A–Å</option>
         <option value="navn_desc">Navn Å–A</option>
@@ -1433,7 +1493,98 @@
     </div>
   {/if}
 
-  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__"}
+  {#if currentKategori === "__dagbok__"}
+    <div class="dagbok-visning">
+      <div class="dagbok-tabs">
+        {#each (['dag','uke','måned'] as const) as t}
+          <button class:aktiv={dagbokTab===t} onclick={() => dagbokTab=t}>{t.charAt(0).toUpperCase()+t.slice(1)}</button>
+        {/each}
+      </div>
+
+      {#if dagbokTab === 'dag'}
+        <input type="date" bind:value={dagbokValgtDato} />
+        {@const dagPoster = loggForDato(dagbokPoster, dagbokValgtDato)}
+        {@const sum = loggSumNæring(dagPoster, næringMap)}
+        {@const behov = aktivProfil ? dagsbehov(aktivProfil).kcal : null}
+
+        {#each (['frokost','lunsj','middag','kveldsmat','annet'] as const) as tid}
+          {@const seksPoster = dagPoster.filter(p => p.tidspunkt === tid)}
+          <div class="dagbok-seksjon">
+            <h3>{tid.charAt(0).toUpperCase() + tid.slice(1)}</h3>
+            {#if seksPoster.length === 0}
+              <p class="ingen">Ingen poster</p>
+            {:else}
+              {#each seksPoster as p}
+                <div class="dagbok-post">
+                  <span>
+                    {#if p.type === 'oppskrift'}
+                      {#await invoke('hent_oppskrift', { id: p.oppskriftId }) then o}
+                        {(o as any)?.navn ?? 'Ukjent oppskrift'} × {p.porsjoner}
+                      {/await}
+                    {:else}
+                      {p.beskrivelse}
+                    {/if}
+                  </span>
+                  <span class="kcal">
+                    {#if p.type === 'fri'}{p.kcal} kcal
+                    {:else}{((næringMap[p.oppskriftId]?.kcal ?? 0) * p.porsjoner).toFixed(0)} kcal
+                    {/if}
+                  </span>
+                  <button class="slett-knapp" onclick={async () => {
+                    dagbokPoster = await loggFjern(p.id);
+                  }}>×</button>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        {/each}
+
+        <div class="dagbok-sum">
+          <strong>Totalt: {sum.kcal.toFixed(0)} kcal</strong>
+          | Protein: {sum.protein.toFixed(0)}g
+          | Fett: {sum.fett.toFixed(0)}g
+          | Karbo: {sum.karbo.toFixed(0)}g
+          {#if behov}
+            {@const pst = Math.round(sum.kcal / behov * 100)}
+            <div class="fremgangsbar-wrap">
+              <div class="fremgangsbar"
+                style="width:{Math.min(pst,100)}%;background:{pst<100?'var(--farge-ok,green)':pst<=120?'var(--farge-advarsel,orange)':'var(--farge-feil,red)'}">
+              </div>
+            </div>
+            <span>{pst}% av dagsbehov ({behov} kcal)</span>
+          {/if}
+        </div>
+      {/if}
+
+      {#if dagbokTab === 'uke' || dagbokTab === 'måned'}
+        {@const dager = dagbokTab === 'uke' ? 7 : 30}
+        {@const data = loggKcalPerDag(dagbokPoster, næringMap, dager)}
+        {@const behovKcal = aktivProfil ? dagsbehov(aktivProfil).kcal : 0}
+        {@const maxKcal = Math.max(...data.map(d => d.kcal), behovKcal, 100)}
+        {@const snitt = dagbokTab === 'måned' ? Math.round(data.reduce((s,d)=>s+d.kcal,0)/dager) : null}
+        <svg viewBox="0 0 {dager*24} 160" class="kcal-graf">
+          {#each data as d, i}
+            {@const h = Math.round((d.kcal / maxKcal) * 130)}
+            <rect x={i*24+2} y={160-h} width="20" height={h}
+              fill="var(--farge-primær, #b5651d)"
+              onclick={() => { dagbokTab = 'dag'; dagbokValgtDato = d.dato; }}
+              style="cursor:pointer" />
+            <title>{d.dato}: {d.kcal} kcal</title>
+          {/each}
+          {#if aktivProfil}
+            {@const behovY = 160 - Math.round((dagsbehov(aktivProfil).kcal / maxKcal) * 130)}
+            <line x1="0" y1={behovY} x2={dager*24} y2={behovY}
+              stroke="var(--farge-tekst,#333)" stroke-dasharray="4 4" stroke-width="1" />
+          {/if}
+        </svg>
+        {#if snitt != null}<p>Snitt: {snitt} kcal/dag</p>{/if}
+      {/if}
+
+      <button class="logg-fab" onclick={() => loggModalApen = true}>+</button>
+    </div>
+  {/if}
+
+  {#if currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__"}
   <div id="grid-wrap">
     {#if currentKategori === "alle" && !sok && forsideOppskrifter.length > 0}
       <div class="forside-wrap">
@@ -1513,7 +1664,7 @@
       {/if}
     </div>
 
-    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && pages > 1}
+    {#if currentKategori !== "__fav__" && currentKategori !== "__handle__" && currentKategori !== "__innst__" && currentKategori !== "__lager__" && currentKategori !== "__plan__" && currentKategori !== "__dagbok__" && pages > 1}
       <div id="pagination">
         <button class="page-btn" disabled={side === 1} onclick={() => gåTilSide(side - 1)}>‹</button>
         {#each pageNums as p, idx (p)}
@@ -1526,6 +1677,84 @@
       </div>
     {/if}
   </div>
+  {/if}
+
+  {#if loggModalApen}
+    <div class="modal-bakgrunn" role="presentation" onclick={() => loggModalApen = false}>
+      <div class="logg-modal" role="dialog" tabindex="-1" onclick={(e) => e.stopPropagation()}>
+        <div class="modal-tittel">Logg måltid</div>
+
+        <label>Tidspunkt
+          <select bind:value={loggTidspunkt}>
+            {#each (['frokost','lunsj','middag','kveldsmat','annet'] as const) as t}
+              <option value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+            {/each}
+          </select>
+        </label>
+
+        <div class="modal-tabs">
+          <button class:aktiv={loggModalTab==='oppskrift'} onclick={() => loggModalTab='oppskrift'}>Fra oppskrift</button>
+          <button class:aktiv={loggModalTab==='fri'} onclick={() => loggModalTab='fri'}>Fri innføring</button>
+        </div>
+
+        {#if loggModalTab === 'oppskrift'}
+          <input type="search" placeholder="Søk oppskrift..." bind:value={loggSøk}
+            oninput={async () => {
+              if (loggSøk.length < 2) { loggSøkResultater = []; return; }
+              const res = await invoke<any>("hent_oppskrifter", {
+                kategori: null, sok: loggSøk, side: 1, perSide: 8, dietter: [], sorter: "navn_asc"
+              });
+              loggSøkResultater = res?.oppskrifter ?? [];
+            }} />
+          {#if loggValgtOppskrift}
+            <div class="logg-valgt">
+              <strong>{loggValgtOppskrift.navn}</strong>
+              <div class="porsjon-kontroll">
+                <button onclick={() => loggPorsjoner = Math.max(1, loggPorsjoner - 1)}>−</button>
+                <span>{loggPorsjoner} porsjon{loggPorsjoner !== 1 ? 'er' : ''}</span>
+                <button onclick={() => loggPorsjoner++}>+</button>
+              </div>
+            </div>
+          {:else}
+            <ul class="logg-søk-liste">
+              {#each loggSøkResultater.slice(0, 8) as r}
+                <li onclick={() => { loggValgtOppskrift = r; loggSøk = r.navn; loggSøkResultater = []; }}>
+                  {r.navn}
+                </li>
+              {/each}
+            </ul>
+          {/if}
+        {:else}
+          <input type="text" placeholder="Beskrivelse (f.eks. 2 egg, stekt)" bind:value={loggFriBesk} />
+          <input type="number" placeholder="kcal (påkrevd)" bind:value={loggFriKcal} min="0" />
+          <input type="number" placeholder="Protein (g, valgfritt)" bind:value={loggFriProtein} min="0" />
+          <input type="number" placeholder="Fett (g, valgfritt)" bind:value={loggFriFett} min="0" />
+          <input type="number" placeholder="Karbohydrat (g, valgfritt)" bind:value={loggFriKarbo} min="0" />
+        {/if}
+
+        <div class="modal-knapper">
+          <button onclick={() => loggModalApen = false}>Avbryt</button>
+          <button class="primær" onclick={async () => {
+            const dato = dagbokValgtDato;
+            let nyPost: Loggpost;
+            if (loggModalTab === 'oppskrift' && loggValgtOppskrift) {
+              nyPost = { id: crypto.randomUUID(), dato, tidspunkt: loggTidspunkt,
+                type: 'oppskrift', oppskriftId: loggValgtOppskrift.id, porsjoner: loggPorsjoner };
+            } else if (loggModalTab === 'fri' && loggFriKcal != null && loggFriBesk.trim()) {
+              nyPost = { id: crypto.randomUUID(), dato, tidspunkt: loggTidspunkt,
+                type: 'fri', beskrivelse: loggFriBesk.trim(),
+                kcal: loggFriKcal, protein: loggFriProtein ?? 0,
+                fett: loggFriFett ?? 0, karbo: loggFriKarbo ?? 0 };
+            } else return;
+            dagbokPoster = await loggLeggTil(nyPost);
+            await oppdaterNæringMap(dagbokPoster);
+            loggModalApen = false;
+            loggValgtOppskrift = null; loggSøk = ""; loggPorsjoner = 1;
+            loggFriBesk = ""; loggFriKcal = null; loggFriProtein = null; loggFriFett = null; loggFriKarbo = null;
+          }}>Logg</button>
+        </div>
+      </div>
+    </div>
   {/if}
 </main>
 
@@ -2796,4 +3025,35 @@
   .plan-toggle.deaktivert { opacity: 0.4; cursor: not-allowed; }
   .pynt-toggle { margin-top: 10px; border-top: 1px solid var(--border-light); padding-top: 10px; }
   .pynt-toggle.deaktivert { opacity: 0.4; cursor: not-allowed; }
+
+  /* ── Dagbok ────────────────────────────────────────────────────────────────── */
+  .dagbok-visning { padding: 1rem; max-width: 700px; }
+  .dagbok-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+  .dagbok-tabs button.aktiv { font-weight: bold; border-bottom: 2px solid currentColor; }
+  .dagbok-seksjon { margin-bottom: 1rem; }
+  .dagbok-seksjon h3 { font-size: 0.9rem; text-transform: uppercase; opacity: 0.6; margin-bottom: 0.25rem; }
+  .dagbok-post { display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; }
+  .dagbok-post .kcal { margin-left: auto; opacity: 0.7; font-size: 0.9rem; }
+  .dagbok-sum { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--farge-kant, #ddd); }
+  .fremgangsbar-wrap { height: 8px; background: var(--farge-kant,#eee); border-radius: 4px; margin: 0.5rem 0; }
+  .fremgangsbar { height: 8px; border-radius: 4px; transition: width 0.3s; }
+  .logg-fab { position: fixed; bottom: 2rem; right: 2rem; width: 3rem; height: 3rem;
+    border-radius: 50%; font-size: 1.5rem; background: var(--farge-primær,#b5651d);
+    color: white; border: none; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+  .kcal-graf { width: 100%; height: 160px; }
+  .logg-modal { background: var(--farge-flate,#fff); padding: 1.5rem; border-radius: 8px;
+    max-width: 480px; width: 90%; display: flex; flex-direction: column; gap: 0.75rem; }
+  .logg-søk-liste { list-style: none; padding: 0; margin: 0; border: 1px solid var(--farge-kant,#ddd); border-radius: 4px; }
+  .logg-søk-liste li { padding: 0.5rem; cursor: pointer; }
+  .logg-søk-liste li:hover { background: var(--farge-kant,#eee); }
+  .logg-valgt { padding: 0.5rem; border: 1px solid var(--farge-primær,#b5651d); border-radius: 4px; }
+  .porsjon-kontroll { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; }
+  .ingen { opacity: 0.5; font-style: italic; font-size: 0.9rem; }
+  .modal-tittel { font-size: 1.1rem; font-weight: bold; }
+  .modal-tabs { display: flex; gap: 0.5rem; }
+  .modal-tabs button.aktiv { font-weight: bold; border-bottom: 2px solid currentColor; }
+  .modal-knapper { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 0.5rem; }
+  .modal-knapper button.primær { background: var(--farge-primær,#b5651d); color: white; border: none; border-radius: 4px; padding: 0.4rem 1rem; cursor: pointer; }
+  .slett-knapp { margin-left: auto; background: none; border: none; cursor: pointer; opacity: 0.5; font-size: 1rem; }
+  .slett-knapp:hover { opacity: 1; }
 </style>
