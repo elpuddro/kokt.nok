@@ -185,12 +185,11 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     Spec: `docs/superpowers/specs/2026-06-26-kaloriregnskap-design.md`.
     Plan: `docs/superpowers/plans/2026-06-26-kaloriregnskap.md`.
 
-30. **Manuell prisregistrering + historikk** — brukeren legger inn pris per ingrediens
-    manuelt (f.eks. fra kvittering), med dato og butikk (valgfritt). Historikk vises
-    som enkel pristrend per ingrediens (SVG-linjediagram). Særlig verdifullt i
-    fengselsutgaven: 120 beboere uten internett kan kollektivt holde prislisten
-    oppdatert ved å registrere kvitteringer. Gir grunnlag for realistiske
-    kostnadsestimater i handlelisten (#1). Persistert i Tauri Store. **Ikke startet.**
+~~30. **Manuell prisregistrering + historikk**~~ — ✅ **FERDIG 2026-06-26.**
+    Ingredienspriser registreres via kvitteringsmodus (tabellredigering med autofullføring),
+    prishistorikk med SVG-linjediagram, handleliste viser estimert kostnad.
+    Spec: `docs/superpowers/specs/2026-06-26-prisregistrering-design.md`.
+    Plan: `docs/superpowers/plans/2026-06-26-prisregistrering.md`.
 
 ~~31. **Porsjons-kalkulator i Cook Mode**~~ — ✅ **ALLEREDE IMPLEMENTERT.**
     Porsjons-raden (−/+) er alltid synlig i detaljvisningen, som er samme view
