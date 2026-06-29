@@ -231,4 +231,5 @@ Opprinnelig lagt til 2026-06-12. Status oppdatert 2026-06-24 (sist: #18 ferdig).
     får engelske navn, beskrivelser og ingrediensnavn via maskinoversettelse +
     manuell QA). Særlig viktig for Android-lansering internasjonalt.
     - [x] #38 Tospråklig app — Sub-prosjekt A (GUI-lag) FERDIG 2026-06-26
+    - [x] #38 Tospråklig app — Sub-prosjekt B (DB-oversettelse) FERDIG 2026-06-29 — DeepL Free (346k/1M tegn brukt), navn + ingredienser oversatt
     - [x] #38 Tospråklig app — Sub-prosjekt C (Rust + DB-kobling) FERDIG 2026-06-26
