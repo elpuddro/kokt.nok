@@ -31,11 +31,12 @@
     "Dessert": "🍰", "Drikke": "🥤", "Forretter": "🥗", "Frokost": "🍳",
     "Grillet kylling": "🍗", "Grillspyd": "🔥", "Gryter": "🍲",
     "Hele fileter": "🐟", "Kaker": "🎂", "Kjøttdeig- og farseretter": "🫕",
-    "Koldtbord": "🧆", "Koteletter": "🥩", "Kyllingfilet": "🍗",
+    "Koldtbord": "🧆", "Koteletter": "🥩", "Kyllingfilet": "🍗", "Lunsj": "🥗",
     "Ovnsretter": "🫙", "Panneretter": "🍳", "Pasta": "🍝", "Pizza": "🍕",
-    "Pålegg": "🧈", "Salater": "🥙", "Sandwich/smørbrød": "🥪", "Steker": "🥩",
-    "Supper": "🍜", "Tapas/småretter": "🫔", "Tilbehør": "🫙", "Turmat": "⛺",
-    "Vafler/pannekaker": "🧇", "Vegan": "🌱", "Vegetar": "🥦", "Wok": "🥡",
+    "Pålegg": "🧈", "Salater": "🥙", "Sandwich/smørbrød": "🥪", "Smårett": "🍽️",
+    "Snacks": "🍿", "Steker": "🥩", "Supper": "🍜", "Tapas/småretter": "🫔",
+    "Tilbehør": "🫙", "Turmat": "⛺", "Vafler/pannekaker": "🧇",
+    "Vegan": "🌱", "Vegetar": "🥦", "Wok": "🥡",
   };
   const emoji = (t: string | null | undefined) => EMOJI[t ?? ""] ?? "🍽️";
 
