@@ -51,13 +51,15 @@ fn open(app: &AppHandle) -> Result<Connection, String> {
 }
 
 /// Returnerer riktig SQL-kolonneuttrykk basert på språk.
-/// lang == Some("en") -> COALESCE(col_en, col) AS col
-/// alt annet         -> col AS col  (norsk original)
+/// lang == Some("en") -> COALESCE(col_en, col) AS alias
+/// alt annet         -> col AS alias  (norsk original)
+/// alias = siste del etter punktum i col (f.eks. "o.navn" -> "navn")
 fn en_col(col: &str, col_en: &str, lang: &Option<String>) -> String {
+    let alias = col.rsplit('.').next().unwrap_or(col);
     if lang.as_deref() == Some("en") {
-        format!("COALESCE({col_en}, {col}) AS {col}", col = col, col_en = col_en)
+        format!("COALESCE({col_en}, {col}) AS {alias}")
     } else {
-        format!("{col} AS {col}", col = col)
+        format!("{col} AS {alias}")
     }
 }
 
