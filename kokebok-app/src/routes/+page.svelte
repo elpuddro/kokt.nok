@@ -1679,8 +1679,7 @@
       }}>📋 {t("receipt_title", lang)}</button>
       <input type="search" placeholder={t("prices_search", lang)} bind:value={prisSearchTerm} />
 
-      {@const visIngr = unike_ingredienser(priserPoster).filter(n => !prisSearchTerm || n.includes(prisSearchTerm.toLowerCase()))}
-      {#each visIngr as navn}
+      {#each unike_ingredienser(priserPoster).filter(n => !prisSearchTerm || n.includes(prisSearchTerm.toLowerCase())) as navn}
         {@const siste = prisForIngrediens(navn, priserPoster)}
         <div class="pris-rad" role="button" tabindex="0"
           onclick={() => { historikkIngrediens = historikkIngrediens === navn ? null : navn; }}
