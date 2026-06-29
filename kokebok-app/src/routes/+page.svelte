@@ -1027,8 +1027,13 @@
 
 <aside id="sidebar">
   <div class="sidebar-logo">
-    <span class="logo-icon">🍳</span>
-    <span class="logo-text">Steike bra</span>
+    <div class="logo-emblem">
+      <span class="logo-icon">🍳</span>
+    </div>
+    <div class="logo-tekst-blokk">
+      <span class="logo-text">Steike bra</span>
+      <span class="logo-tagline">{lang === "en" ? "5962 recipes at your fingertips" : "5962 oppskrifter i lomma"}</span>
+    </div>
   </div>
 
   <div class="profil-velger">
@@ -1709,7 +1714,7 @@
           </ul>
         {/if}
       {/each}
-      {#if visIngr.length === 0}
+      {#if unike_ingredienser(priserPoster).filter(n => !prisSearchTerm || n.includes(prisSearchTerm.toLowerCase())).length === 0}
         <p class="ingen">{t("prices_empty", lang)}</p>
       {/if}
     </div>
@@ -2450,13 +2455,32 @@
     display: flex; flex-direction: column; height: 100vh; overflow: hidden; z-index: 10;
   }
   .sidebar-logo {
-    display: flex; align-items: center; gap: 10px;
-    padding: 22px 20px 18px; border-bottom: 1px solid var(--border); background: var(--bg-warm);
+    display: flex; align-items: center; gap: 12px;
+    padding: 18px 20px 16px; border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, var(--bg-warm) 0%, color-mix(in srgb, var(--accent) 8%, var(--bg-warm)) 100%);
+    position: relative; overflow: hidden;
   }
-  .logo-icon { font-size: 26px; }
+  .sidebar-logo::before {
+    content: ''; position: absolute; top: -20px; right: -20px;
+    width: 80px; height: 80px; border-radius: 50%;
+    background: color-mix(in srgb, var(--accent) 10%, transparent);
+    pointer-events: none;
+  }
+  .logo-emblem {
+    width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+    background: linear-gradient(145deg, var(--accent) 0%, var(--accent-dark) 100%);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+  .logo-icon { font-size: 24px; line-height: 1; filter: drop-shadow(0 1px 1px rgba(0,0,0,0.2)); }
+  .logo-tekst-blokk { display: flex; flex-direction: column; gap: 1px; }
   .logo-text {
-    font-family: var(--font-head); font-size: 1.35rem; font-weight: 700;
-    color: var(--accent-dark); letter-spacing: 0.2px;
+    font-family: var(--font-head); font-size: 1.25rem; font-weight: 700;
+    color: var(--accent-dark); letter-spacing: 0.2px; line-height: 1.2;
+  }
+  .logo-tagline {
+    font-size: 0.68rem; color: var(--text-dim); letter-spacing: 0.3px;
+    font-family: var(--font-ui); font-style: italic;
   }
 
   .search-wrap { position: relative; padding: 14px 14px 8px; }
