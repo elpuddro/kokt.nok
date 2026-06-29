@@ -1282,24 +1282,23 @@
         <button class:aktiv-fane={innstFane === "spraak"} onclick={() => (innstFane = "spraak")}>🌐 {t("settings_language", lang)}</button>
       </div>
       {#if innstFane === "tema"}
-      <details class="innst-seksjon">
-        <summary><h2>🎨 Tema</h2></summary>
+      <div class="innst-seksjon">
         <p class="innst-hint">
-          Automatisk velger tema etter årstid og høytider. Nå:
-          <strong>{TEMAER.find((t) => t.id === gjeldendeTema(new Date()))?.navn ?? "Varm"}</strong>.
+          {t("theme_auto_hint", lang)}
+          <strong>{TEMAER.find((te) => te.id === gjeldendeTema(new Date()))?.navn ?? "Varm"}</strong>.
         </p>
         <label class="tema-valg" class:valgt={temaValg.modus === "auto"}>
           <input type="radio" name="tema" checked={temaValg.modus === "auto"} onchange={velgTemaAuto} />
-          <span>Automatisk (følg årstid / høytid)</span>
+          <span>{t("theme_auto", lang)}</span>
         </label>
-        {#each TEMAER as t (t.id)}
-          <label class="tema-valg" class:valgt={temaValg.modus === "manuell" && temaValg.tema === t.id}>
+        {#each TEMAER as te (te.id)}
+          <label class="tema-valg" class:valgt={temaValg.modus === "manuell" && temaValg.tema === te.id}>
             <input
               type="radio" name="tema"
-              checked={temaValg.modus === "manuell" && temaValg.tema === t.id}
-              onchange={() => velgTemaManuell(t.id)}
+              checked={temaValg.modus === "manuell" && temaValg.tema === te.id}
+              onchange={() => velgTemaManuell(te.id)}
             />
-            <span>{t.navn}</span>
+            <span>{te.navn}</span>
           </label>
         {/each}
         <label class="tema-valg pynt-toggle {!aktivHoytid ? 'deaktivert' : ''}">
@@ -1309,20 +1308,14 @@
             disabled={!aktivHoytid}
             onchange={() => { pynt = !pynt; onPyntChange(); }}
           />
-          <span>Høytidspynt {aktivHoytid ? '' : '(ingen aktiv høytid)'}</span>
+          <span>{t("theme_holiday_decor", lang)} {aktivHoytid ? '' : t("theme_no_holiday", lang)}</span>
         </label>
-      </details>
+      </div>
       {/if}
       {#if innstFane === "diett"}
-      <details class="innst-seksjon">
-        <summary>
-          <h2>🍽️ Kosthold og allergier <span class="beta-merke">BETA</span></h2>
-          {#if aktiveDietter.length > 0}<span class="innst-teller">{aktiveDietter.length}</span>{/if}
-        </summary>
-        <p class="innst-hint">
-          Beste-evne-filtrering basert på ingrediensnavn — ikke en garanti.
-          For alvorlige allergier: les alltid den fulle ingredienslista selv.
-        </p>
+      <div class="innst-seksjon">
+        {#if aktiveDietter.length > 0}<span class="innst-teller">{aktiveDietter.length}</span>{/if}
+        <p class="innst-hint">{t("diet_hint", lang)}</p>
         {#each DIETT_FILTRE as f (f.id)}
           <label class="tema-valg" class:valgt={aktiveDietter.includes(f.id)}>
             <input
@@ -1333,80 +1326,78 @@
             <span>{f.navn}</span>
           </label>
         {/each}
-      </details>
+      </div>
       {/if}
       {#if innstFane === "profil"}
-      <div class="profil-liste">
-        <h2>Helseprofiler</h2>
+      <div class="profil-liste innst-seksjon">
+        <h2>{t("profile_title", lang)}</h2>
         {#each profilStore.profiler as p (p.id)}
           <div class="profil-kort" class:aktiv-profil={p.id === profilStore.aktivId}>
             <div class="profil-kort-info">
               <strong>{p.navn}</strong>
               <span>{tdee(p)} kcal/dag {midjeOverGrenje(p) ? "🎯" : ""}</span>
-              {#if p.id === profilStore.aktivId}<span class="aktiv-merke">● Aktiv</span>{/if}
+              {#if p.id === profilStore.aktivId}<span class="aktiv-merke">● {t("profile_active", lang)}</span>{/if}
             </div>
             <div class="profil-kort-knapper">
               {#if p.id !== profilStore.aktivId}
-                <button onclick={() => velgProfilAktiv(p.id)}>Velg</button>
+                <button onclick={() => velgProfilAktiv(p.id)}>{t("profile_select", lang)}</button>
               {/if}
-              <button onclick={() => startRedigerProfil(p)}>Rediger</button>
-              <button onclick={() => slettProfil(p.id)}>Slett</button>
+              <button onclick={() => startRedigerProfil(p)}>{t("profile_edit", lang)}</button>
+              <button onclick={() => slettProfil(p.id)}>{t("profile_delete", lang)}</button>
             </div>
           </div>
         {/each}
         {#if profilStore.profiler.length === 0}
-          <p class="lager-tom">Ingen profiler opprettet ennå.</p>
+          <p class="lager-tom">{t("profile_none", lang)}</p>
         {/if}
         {#if !profilSkjemaÅpent}
-          <button class="profil-ny-knapp" onclick={startNyProfil}>+ Ny profil</button>
+          <button class="profil-ny-knapp" onclick={startNyProfil}>+ {t("profile_add", lang)}</button>
         {:else}
           <div class="profil-skjema">
-            <h3>{profilRedigerer ? "Rediger profil" : "Ny profil"}</h3>
-            <label>Navn <input type="text" bind:value={profilFelt.navn} /></label>
-            <label>Kjønn
+            <h3>{profilRedigerer ? t("profile_edit_title", lang) : t("profile_new_title", lang)}</h3>
+            <label>{t("profile_name", lang)} <input type="text" bind:value={profilFelt.navn} /></label>
+            <label>{t("profile_gender", lang)}
               <select bind:value={profilFelt.kjønn}>
-                <option value="mann">Mann</option>
-                <option value="kvinne">Kvinne</option>
+                <option value="mann">{t("profile_male", lang)}</option>
+                <option value="kvinne">{t("profile_female", lang)}</option>
               </select>
             </label>
-            <label>Alder (år) <input type="number" min="10" max="120" bind:value={profilFelt.alder} /></label>
-            <label>Høyde (cm) <input type="number" min="100" max="250" bind:value={profilFelt.høyde} /></label>
-            <label>Vekt (kg) <input type="number" min="30" max="300" step="0.5" bind:value={profilFelt.vekt} /></label>
-            <label>Midjemål (cm) — valgfritt
+            <label>{t("profile_age", lang)} <input type="number" min="10" max="120" bind:value={profilFelt.alder} /></label>
+            <label>{t("profile_height", lang)} <input type="number" min="100" max="250" bind:value={profilFelt.høyde} /></label>
+            <label>{t("profile_weight", lang)} <input type="number" min="30" max="300" step="0.5" bind:value={profilFelt.vekt} /></label>
+            <label>{t("profile_waist", lang)}
               <input type="number" min="50" max="200"
                 bind:value={profilFelt.midje}
-                placeholder="f.eks. 88" />
+                placeholder={t("profile_waist_placeholder", lang)} />
             </label>
             {#if profilFelt.midje}
               <label class="midjefilter-label">
                 <input type="checkbox" bind:checked={profilFelt.midjeFilter} />
-                Filtrer matplan mot sunnere oppskrifter
+                {t("profile_waist_filter", lang)}
               </label>
               {#if !midjeOverGrenjeFelt}
-                <p class="midjefilter-info">
-                  Midjemålet er innenfor normalområdet — filteret er ikke aktivt.
-                </p>
+                <p class="midjefilter-info">{t("profile_waist_ok", lang)}</p>
               {/if}
             {/if}
-            <label>Aktivitetsnivå
+            <label>{t("profile_activity", lang)}
               <select bind:value={profilFelt.aktivitet}>
-                <option value="stillesittende">Stillesittende (lite/ingen trening)</option>
-                <option value="lett">Lett aktiv (1–3 dager/uke)</option>
-                <option value="moderat">Moderat aktiv (3–5 dager/uke)</option>
-                <option value="aktiv">Aktiv (6–7 dager/uke)</option>
-                <option value="veldig_aktiv">Veldig aktiv (hard trening + fysisk jobb)</option>
+                <option value="stillesittende">{t("activity_sed", lang)}</option>
+                <option value="lett">{t("activity_light", lang)}</option>
+                <option value="moderat">{t("activity_mod", lang)}</option>
+                <option value="aktiv">{t("activity_active", lang)}</option>
+                <option value="veldig_aktiv">{t("activity_very", lang)}</option>
               </select>
             </label>
-            <label>Mål
+            <label>{t("profile_goal", lang)}
               <select bind:value={profilFelt.mål}>
-                <option value="nedgang">Vektnedgang (−500 kcal)</option>
-                <option value="vedlikehold">Vedlikehold</option>
-                <option value="oppgang">Vektøkning (+500 kcal)</option>
+                <option value="nedgang">{t("goal_loss", lang)}</option>
+                <option value="vedlikehold">{t("goal_maintain", lang)}</option>
+                <option value="oppgang">{t("goal_gain", lang)}</option>
               </select>
             </label>
             <div class="profil-skjema-knapper">
-              <button onclick={lagreProfil}>Lagre</button>
-              <button onclick={() => (profilSkjemaÅpent = false)}>Avbryt</button>
+              <button onclick={lagreProfil}>{t("profile_save", lang)}</button>
+              <button onclick={() => (profilSkjemaÅpent = false)}>{t("profile_cancel", lang)}</button>
             </div>
           </div>
         {/if}
@@ -1422,9 +1413,8 @@
       {/if}
       {/if}
       {#if innstFane === "spraak"}
-      <details class="innst-seksjon" open>
-        <summary><h2>{t("settings_language", lang)}</h2></summary>
-        <p class="innst-hint">Velg språk for appen. «Automatisk» bruker systemspråket ditt.</p>
+      <div class="innst-seksjon">
+        <p class="innst-hint">{t("lang_hint", lang)}</p>
         <label class="tema-valg" class:valgt={spraakValg === "auto"}>
           <input type="radio" name="spraak" value="auto" bind:group={spraakValg} onchange={lagreSpraak} />
           <span>{t("lang_auto", lang)}</span>
@@ -1437,7 +1427,7 @@
           <input type="radio" name="spraak" value="en" bind:group={spraakValg} onchange={lagreSpraak} />
           <span>{t("lang_en", lang)}</span>
         </label>
-      </details>
+      </div>
       {/if}
     </div>
   {/if}

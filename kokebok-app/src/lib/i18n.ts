@@ -124,22 +124,52 @@ const strings: Record<Lang, Record<string, string>> = {
     lang_nb:             "Norsk",
     lang_en:             "Engelsk",
 
+    // ── Tema ──
+    theme_auto:          "Automatisk (følg årstid / høytid)",
+    theme_auto_hint:     "Automatisk velger tema etter årstid og høytider. Nå:",
+    theme_holiday_decor: "Høytidspynt",
+    theme_no_holiday:    "(ingen aktiv høytid)",
+
+    // ── Kosthold ──
+    diet_hint:           "Beste-evne-filtrering basert på ingrediensnavn — ikke en garanti. For alvorlige allergier: les alltid den fulle ingredienslista selv.",
+    diet_beta_note:      "BETA",
+
     // ── Helseprofil ──
     profile_title:       "Helseprofiler",
+    profile_none:        "Ingen profiler opprettet ennå.",
     profile_active:      "Aktiv",
+    profile_select:      "Velg",
+    profile_edit:        "Rediger",
+    profile_delete:      "Slett",
     profile_add:         "Ny profil",
+    profile_new_title:   "Ny profil",
+    profile_edit_title:  "Rediger profil",
+    profile_cancel:      "Avbryt",
     profile_name:        "Navn",
     profile_gender:      "Kjønn",
     profile_male:        "Mann",
     profile_female:      "Kvinne",
-    profile_age:         "Alder",
+    profile_age:         "Alder (år)",
     profile_height:      "Høyde (cm)",
     profile_weight:      "Vekt (kg)",
+    profile_waist:       "Midjemål (cm) — valgfritt",
+    profile_waist_placeholder: "f.eks. 88",
+    profile_waist_filter: "Filtrer matplan mot sunnere oppskrifter",
+    profile_waist_ok:    "Midjemålet er innenfor normalområdet — filteret er ikke aktivt.",
     profile_activity:    "Aktivitetsnivå",
+    activity_sed:        "Stillesittende (lite/ingen trening)",
+    activity_light:      "Lett aktiv (1–3 dager/uke)",
+    activity_mod:        "Moderat aktiv (3–5 dager/uke)",
+    activity_active:     "Aktiv (6–7 dager/uke)",
+    activity_very:       "Veldig aktiv (hard trening + fysisk jobb)",
     profile_goal:        "Mål",
-    profile_waist:       "Midjeomkrets (cm)",
-    profile_waist_filter: "Vis bare retter under midjefilter-grensen",
-    profile_save:        "Lagre profil",
+    goal_loss:           "Vektnedgang (−500 kcal)",
+    goal_maintain:       "Vedlikehold",
+    goal_gain:           "Vektøkning (+500 kcal)",
+    profile_save:        "Lagre",
+
+    // ── Språkvalg ──
+    lang_hint:           "Velg språk for appen. «Automatisk» bruker systemspråket ditt.",
 
     // ── Måltidstidspunkt ──
     meal_breakfast:      "Frokost",
@@ -338,22 +368,52 @@ const strings: Record<Lang, Record<string, string>> = {
     lang_nb:             "Norwegian",
     lang_en:             "English",
 
+    // ── Theme ──
+    theme_auto:          "Automatic (follow season / holiday)",
+    theme_auto_hint:     "Automatically selects theme by season and holidays. Now:",
+    theme_holiday_decor: "Holiday decorations",
+    theme_no_holiday:    "(no active holiday)",
+
+    // ── Diet ──
+    diet_hint:           "Best-effort filtering based on ingredient names — not a guarantee. For serious allergies: always read the full ingredient list yourself.",
+    diet_beta_note:      "BETA",
+
     // ── Health profile ──
     profile_title:       "Health profiles",
+    profile_none:        "No profiles created yet.",
     profile_active:      "Active",
+    profile_select:      "Select",
+    profile_edit:        "Edit",
+    profile_delete:      "Delete",
     profile_add:         "New profile",
+    profile_new_title:   "New profile",
+    profile_edit_title:  "Edit profile",
+    profile_cancel:      "Cancel",
     profile_name:        "Name",
     profile_gender:      "Gender",
     profile_male:        "Male",
     profile_female:      "Female",
-    profile_age:         "Age",
+    profile_age:         "Age (years)",
     profile_height:      "Height (cm)",
     profile_weight:      "Weight (kg)",
+    profile_waist:       "Waist measurement (cm) — optional",
+    profile_waist_placeholder: "e.g. 88",
+    profile_waist_filter: "Filter meal plan towards healthier recipes",
+    profile_waist_ok:    "Waist measurement is within normal range — filter is not active.",
     profile_activity:    "Activity level",
+    activity_sed:        "Sedentary (little/no exercise)",
+    activity_light:      "Lightly active (1–3 days/week)",
+    activity_mod:        "Moderately active (3–5 days/week)",
+    activity_active:     "Active (6–7 days/week)",
+    activity_very:       "Very active (hard training + physical job)",
     profile_goal:        "Goal",
-    profile_waist:       "Waist circumference (cm)",
-    profile_waist_filter: "Show only recipes below waist filter threshold",
-    profile_save:        "Save profile",
+    goal_loss:           "Weight loss (−500 kcal)",
+    goal_maintain:       "Maintenance",
+    goal_gain:           "Weight gain (+500 kcal)",
+    profile_save:        "Save",
+
+    // ── Language ──
+    lang_hint:           "Choose app language. 'Automatic' uses your system language.",
 
     // ── Meal times ──
     meal_breakfast:      "Breakfast",

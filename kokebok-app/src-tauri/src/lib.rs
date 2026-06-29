@@ -50,6 +50,17 @@ fn open(app: &AppHandle) -> Result<Connection, String> {
         .map_err(|e| format!("Klarte ikke åpne database: {e}"))
 }
 
+/// Returnerer riktig SQL-kolonneuttrykk basert på språk.
+/// lang == Some("en") -> COALESCE(col_en, col) AS col
+/// alt annet         -> col AS col  (norsk original)
+fn en_col(col: &str, col_en: &str, lang: &Option<String>) -> String {
+    if lang.as_deref() == Some("en") {
+        format!("COALESCE({col_en}, {col}) AS {col}", col = col, col_en = col_en)
+    } else {
+        format!("{col} AS {col}", col = col)
+    }
+}
+
 /// Søk i FTS5-tabellen for ett ord.
 /// Prøver eksakt MATCH først. Hvis 0 treff, prøver OR-av-trigrammer (fuzzy).
 /// Returnerer None hvis FTS-tabellen ikke finnes (fallback til LIKE).
@@ -470,8 +481,9 @@ fn hent_oppskrifter(
         "navn_desc" => "o.navn COLLATE NOCASE DESC".to_string(),
         _           => "o.navn COLLATE NOCASE ASC".to_string(),
     };
+    let navn_col = en_col("o.navn", "o.navn_en", &lang);
     let list_sql = format!(
-        "SELECT o.id, o.slug, COALESCE(o.navn_en, o.navn) AS navn, o.type, o.porsjoner, o.tid, o.bilde
+        "SELECT o.id, o.slug, {navn_col}, o.type, o.porsjoner, o.tid, o.bilde
          FROM   oppskrifter o {where_sql}
          ORDER  BY {order}
          LIMIT  ? OFFSET ?"
@@ -497,33 +509,32 @@ fn hent_oppskrift(app: AppHandle, id: i64, lang: Option<String>) -> Result<Optio
     // Eksplisitt kolonneliste (ikke SELECT *) for å unngå å materialisere
     // bilde_data-BLOB-en på hver detalj-åpning i release. Bilder hentes via
     // kbilde-protokollen, ikke herfra.
-    let mut rows = query_json(
-        &conn,
-        "SELECT id, slug, COALESCE(navn_en, navn) AS navn, type,
-                COALESCE(beskrivelse_en, beskrivelse) AS beskrivelse,
-                porsjoner, tid, bilde, url, hentet
-         FROM oppskrifter WHERE id = ?",
-        &[&id],
-    )?;
+    let navn_col = en_col("navn", "navn_en", &lang);
+    let besk_col = en_col("beskrivelse", "beskrivelse_en", &lang);
+    let opp_sql = format!(
+        "SELECT id, slug, {navn_col}, type, {besk_col}, porsjoner, tid, bilde, url, hentet
+         FROM oppskrifter WHERE id = ?"
+    );
+    let mut rows = query_json(&conn, &opp_sql, &[&id])?;
     if rows.is_empty() {
         return Ok(None);
     }
     let mut opp = rows.remove(0);
     let obj = opp.as_object_mut().unwrap();
 
-    let ings = query_json(
-        &conn,
-        "SELECT gruppe, mengde, enhet, COALESCE(navn_en, navn) AS navn, raatekst, sortering
-         FROM ingredienser WHERE oppskrift_id = ? ORDER BY gruppe, sortering",
-        &[&id],
-    )?;
+    let ing_navn_col = en_col("navn", "navn_en", &lang);
+    let ing_sql = format!(
+        "SELECT gruppe, mengde, enhet, {ing_navn_col}, raatekst, sortering
+         FROM ingredienser WHERE oppskrift_id = ? ORDER BY gruppe, sortering"
+    );
+    let ings = query_json(&conn, &ing_sql, &[&id])?;
     obj.insert("ingredienser".into(), Value::Array(ings));
 
-    let trinn = query_json(
-        &conn,
-        "SELECT nummer, COALESCE(tekst_en, tekst) AS tekst FROM trinn WHERE oppskrift_id = ? ORDER BY nummer",
-        &[&id],
-    )?;
+    let tekst_col = en_col("tekst", "tekst_en", &lang);
+    let trinn_sql = format!(
+        "SELECT nummer, {tekst_col} FROM trinn WHERE oppskrift_id = ? ORDER BY nummer"
+    );
+    let trinn = query_json(&conn, &trinn_sql, &[&id])?;
     obj.insert("trinn".into(), Value::Array(trinn));
 
     let kats = query_json(
@@ -685,11 +696,12 @@ fn hent_oppskrifter_by_ids(app: AppHandle, ids: Vec<i64>, lang: Option<String>) 
     // Bygg "?,?,?,..." og eier id-ene som ToSql-referanser (samme mønster som
     // hent_oppskrifter sin owned/filter_refs).
     let placeholders = vec!["?"; ids.len()].join(",");
+    let navn_col = en_col("navn", "navn_en", &lang);
     let sql = format!(
-        "SELECT id, slug, COALESCE(navn_en, navn) AS navn, type, porsjoner, tid, bilde
+        "SELECT id, slug, {navn_col}, type, porsjoner, tid, bilde
          FROM   oppskrifter
          WHERE  id IN ({placeholders})
-         ORDER  BY COALESCE(navn_en, navn) COLLATE NOCASE"
+         ORDER  BY navn COLLATE NOCASE"
     );
     let refs: Vec<&dyn rusqlite::ToSql> =
         ids.iter().map(|i| i as &dyn rusqlite::ToSql).collect();
@@ -776,16 +788,20 @@ fn ingrediens_forslag(app: AppHandle, prefiks: String, lang: Option<String>) -> 
     }
     let conn = open(&app)?;
     // Prioriter de som STARTER med prefikset, så de som inneholder det.
-    let mut stmt = conn
-        .prepare(
-            "SELECT DISTINCT COALESCE(navn_en, navn) AS navn FROM ingredienser \
-             WHERE navn IS NOT NULL \
-               AND (LOWER(COALESCE(navn_en, navn)) LIKE ?1 OR LOWER(navn) LIKE ?1) \
-             ORDER BY CASE WHEN LOWER(COALESCE(navn_en, navn)) LIKE ?2 THEN 0 ELSE 1 END, \
-                      COALESCE(navn_en, navn) COLLATE NOCASE \
-             LIMIT 10",
-        )
-        .map_err(|e| e.to_string())?;
+    let ing_col = if lang.as_deref() == Some("en") {
+        "COALESCE(navn_en, navn)"
+    } else {
+        "navn"
+    };
+    let forslag_sql = format!(
+        "SELECT DISTINCT {ing_col} AS navn FROM ingredienser \
+         WHERE navn IS NOT NULL \
+           AND (LOWER({ing_col}) LIKE ?1 OR LOWER(navn) LIKE ?1) \
+         ORDER BY CASE WHEN LOWER({ing_col}) LIKE ?2 THEN 0 ELSE 1 END, \
+                  {ing_col} COLLATE NOCASE \
+         LIMIT 10"
+    );
+    let mut stmt = conn.prepare(&forslag_sql).map_err(|e| e.to_string())?;
     let inneholder = format!("%{p}%");
     let starter = format!("{p}%");
     let rader = stmt
@@ -801,11 +817,13 @@ fn sok_ingredienser(app: AppHandle, q: String, lang: Option<String>) -> Result<V
     }
     let conn = open(&app)?;
     let mønster = format!("%{}%", q.to_lowercase());
-    let mut stmt = conn.prepare(
-        "SELECT DISTINCT COALESCE(navn_en, navn) AS navn FROM ingredienser \
-         WHERE LOWER(COALESCE(navn_en, navn)) LIKE ?1 OR LOWER(navn) LIKE ?1 \
+    let ing_col = if lang.as_deref() == Some("en") { "COALESCE(navn_en, navn)" } else { "navn" };
+    let sok_sql = format!(
+        "SELECT DISTINCT {ing_col} AS navn FROM ingredienser \
+         WHERE LOWER({ing_col}) LIKE ?1 OR LOWER(navn) LIKE ?1 \
          ORDER BY 1 LIMIT 20"
-    ).map_err(|e| e.to_string())?;
+    );
+    let mut stmt = conn.prepare(&sok_sql).map_err(|e| e.to_string())?;
     let navn: Vec<String> = stmt.query_map([&mønster], |row| row.get(0))
         .map_err(|e| e.to_string())?
         .filter_map(|r| r.ok())
@@ -831,17 +849,17 @@ fn hva_kan_jeg_lage(app: AppHandle, varer: Vec<String>, lang: Option<String>) ->
         return Ok(vec![]);
     }
     let conn = open(&app)?;
-    let mut stmt = conn
-        .prepare(
-            "SELECT o.id, COALESCE(o.navn_en, o.navn) AS navn, o.type, \
-                    COALESCE(i.navn_en, i.navn) AS inavn \
-             FROM oppskrifter o JOIN ingredienser i ON i.oppskrift_id = o.id \
-             WHERE i.navn IS NOT NULL AND i.navn != '' \
-             AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
-                             WHERE ai.oppskrift_id = o.id AND t.tagg = 'alkohol') \
-             ORDER BY o.id",
-        )
-        .map_err(|e| e.to_string())?;
+    let o_navn = if lang.as_deref() == Some("en") { "COALESCE(o.navn_en, o.navn)" } else { "o.navn" };
+    let i_navn = if lang.as_deref() == Some("en") { "COALESCE(i.navn_en, i.navn)" } else { "i.navn" };
+    let hkjl_sql = format!(
+        "SELECT o.id, {o_navn} AS navn, o.type, {i_navn} AS inavn \
+         FROM oppskrifter o JOIN ingredienser i ON i.oppskrift_id = o.id \
+         WHERE i.navn IS NOT NULL AND i.navn != '' \
+         AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
+                         WHERE ai.oppskrift_id = o.id AND t.tagg = 'alkohol') \
+         ORDER BY o.id"
+    );
+    let mut stmt = conn.prepare(&hkjl_sql).map_err(|e| e.to_string())?;
     let rader = stmt
         .query_map([], |r| {
             Ok((
@@ -986,6 +1004,7 @@ fn kandidater_for_slot(
     conn: &Connection,
     slot: &str,
     dietter: &Option<Vec<String>>,
+    lang: &Option<String>,
 ) -> Vec<Kandidat> {
     let kats = slot_kategorier(slot);
     if kats.is_empty() {
@@ -1009,8 +1028,9 @@ fn kandidater_for_slot(
     let alkohol_where = " AND NOT EXISTS (SELECT 1 FROM ingredienser ai \
         JOIN ingrediens_tagg t ON t.navn = ai.navn \
         WHERE ai.oppskrift_id = o.id AND t.tagg = 'alkohol')";
+    let o_navn = if lang.as_deref() == Some("en") { "COALESCE(o.navn_en, o.navn)" } else { "o.navn" };
     let sql = format!(
-        "SELECT o.id, COALESCE(o.navn_en, o.navn) AS navn, o.type, o.hoytid FROM oppskrifter o \
+        "SELECT o.id, {o_navn} AS navn, o.type, o.hoytid FROM oppskrifter o \
          WHERE o.type IN ({kat_ph}){diett_where}{alkohol_where} LIMIT 400"
     );
     let refs: Vec<&dyn rusqlite::ToSql> =
@@ -1166,6 +1186,7 @@ fn generer_matplan(
     laaste: Vec<LaastSlot>,
     #[allow(non_snake_case)] sunnPlan: bool,
     hoytid: Option<String>,
+    lang: Option<String>,
 ) -> Result<UkeSvar, String> {
     use std::collections::HashSet;
     let conn = open(&app)?;
@@ -1186,10 +1207,10 @@ fn generer_matplan(
     let mut rng: u64 = seed_ns | 1; // xorshift64 krever non-zero seed
 
     // Forhåndshent og shuffle kandidater per slot — ett DB-kall per slot-type.
-    let mut kand_frokost = kandidater_for_slot(&conn, "frokost", &dietter);
-    let mut kand_lunsj = kandidater_for_slot(&conn, "lunsj", &dietter);
-    let mut kand_middag = kandidater_for_slot(&conn, "middag", &dietter);
-    let mut kand_kveld = kandidater_for_slot(&conn, "kveldsmat", &dietter);
+    let mut kand_frokost = kandidater_for_slot(&conn, "frokost", &dietter, &lang);
+    let mut kand_lunsj = kandidater_for_slot(&conn, "lunsj", &dietter, &lang);
+    let mut kand_middag = kandidater_for_slot(&conn, "middag", &dietter, &lang);
+    let mut kand_kveld = kandidater_for_slot(&conn, "kveldsmat", &dietter, &lang);
     shuffle(&mut kand_frokost, &mut rng);
     shuffle(&mut kand_lunsj, &mut rng);
     shuffle(&mut kand_middag, &mut rng);
@@ -1482,20 +1503,22 @@ fn forside_oppskrifter(
     typer: Vec<String>,
     #[allow(non_snake_case)] nattFilter: bool,
     hoytid: Option<String>,
+    lang: Option<String>,
 ) -> Vec<ForsideOppskrift> {
     let conn = match open(&app) {
         Ok(c) => c,
         Err(_) => return vec![],
     };
+    let navn_expr = if lang.as_deref() == Some("en") { "COALESCE(navn_en, navn)" } else { "navn" };
 
     // Høytidsmodus: ignorer typer/nattFilter, filtrer på høytid-kolonne
     if let Some(ref h) = hoytid {
-        let sql = "SELECT id, COALESCE(navn_en, navn) AS navn, tid, bilde FROM oppskrifter \
+        let sql = format!("SELECT id, {navn_expr} AS navn, tid, bilde FROM oppskrifter \
                    WHERE hoytid IS NOT NULL AND (',' || hoytid || ',') LIKE ('%,' || ? || ',%') \
                    AND NOT EXISTS (SELECT 1 FROM ingredienser ai JOIN ingrediens_tagg t ON t.navn = ai.navn \
                        WHERE ai.oppskrift_id = oppskrifter.id AND t.tagg = 'alkohol') \
-                   ORDER BY RANDOM() LIMIT 20";
-        return conn.prepare(sql)
+                   ORDER BY RANDOM() LIMIT 20");
+        return conn.prepare(&sql)
             .and_then(|mut stmt| {
                 stmt.query_map([h.as_str()], |row| {
                     Ok(ForsideOppskrift {
@@ -1521,7 +1544,7 @@ fn forside_oppskrifter(
         WHERE ai.oppskrift_id = oppskrifter.id AND t.tagg = 'alkohol')";
     let sql = if nattFilter {
         format!(
-            "SELECT id, COALESCE(navn_en, navn) AS navn, tid, bilde FROM oppskrifter \
+            "SELECT id, {navn_expr} AS navn, tid, bilde FROM oppskrifter \
              WHERE type IN ({placeholders}) \
              AND id NOT IN ( \
                  SELECT DISTINCT oppskrift_id FROM trinn \
@@ -1533,7 +1556,7 @@ fn forside_oppskrifter(
         )
     } else {
         format!(
-            "SELECT id, COALESCE(navn_en, navn) AS navn, tid, bilde FROM oppskrifter \
+            "SELECT id, {navn_expr} AS navn, tid, bilde FROM oppskrifter \
              WHERE type IN ({placeholders}) \
              {alkohol_ekskluder} \
              ORDER BY RANDOM() LIMIT 20"
